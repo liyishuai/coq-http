@@ -2,8 +2,6 @@ From Coq Require Export
      Basics
      Bool
      DecidableClass.
-From Ceres Require Import
-     CeresString.
 From Ceres Require Export
      Ceres.
 From ExtLib Require Export

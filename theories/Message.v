@@ -28,7 +28,7 @@ Record authority :=
   Authority {
       authority__userinfo : option string;
       authority__host     : string;
-      authroity__port     : option N
+      authority__port     : option N
     }.
 
 (** https://www.rfc-editor.org/rfc/rfc3986.html#section-3.3 *)
@@ -141,10 +141,11 @@ Record http_request :=
       request__body   : option message_body
     }.
 
-Record http_response exp_ :=
+Record http_response {exp_} :=
   Response {
       response__line   : status_line;
       response__fields : list (field_line exp_);
       response__body   : option (exp_ message_body)
     }.
-Arguments Response {_}.
+Arguments http_response : clear implicits.
+Arguments Response {exp_}.
