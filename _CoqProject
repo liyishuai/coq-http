@@ -1,3 +1,5 @@
 -Q theories HTTP
+-arg -w -arg -solve_obligation_error
 
 theories/Message.v
+theories/Semantics.v
