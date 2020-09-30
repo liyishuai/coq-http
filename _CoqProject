@@ -2,4 +2,5 @@
 -arg -w -arg -solve_obligation_error
 
 theories/Message.v
+theories/Printer.v
 theories/Semantics.v
