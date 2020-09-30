@@ -78,12 +78,15 @@ Notation connT := nat.
 
 Variant appE {exp_} : Type -> Type :=
   App__Recv : appE (connT * http_request)
-| App__Send : connT -> @http_response exp_ -> appE unit
-| App__New  : appE (exp_ message_body).
+| App__Send : connT -> @http_response exp_ -> appE unit.
 Arguments appE : clear implicits.
 
-Class Is__smE E `{appE exp -< E} `{nondetE -< E}.
-Notation smE := (appE exp +' nondetE).
+Variant symE {exp_} : Type -> Set :=
+  Sym__New : symE (exp_ message_body).
+Arguments symE : clear implicits.
+
+Class Is__smE E `{appE exp -< E} `{nondetE -< E} `{symE exp -< E}.
+Notation smE := (appE exp +' nondetE +' symE exp).
 Instance smE_Is__smE : Is__smE smE. Defined.
 
 Definition http_smi {E R} `{Is__smE E} : itree E R :=
@@ -109,7 +112,7 @@ Definition http_smi {E R} `{Is__smE E} : itree E R :=
            | Some None => not_found;; call st
            | None =>
              or (not_found;; call ((p, None)::st))
-                (m <- trigger (@App__New exp);; ok m;; call ((p, Some m)::st))
+                (m <- trigger (@Sym__New exp);; ok m;; call ((p, Some m)::st))
            end
          | Method__PUT =>
            match om with
