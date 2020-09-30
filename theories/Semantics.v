@@ -5,6 +5,7 @@ From Coq Require Export
 From Ceres Require Export
      Ceres.
 From ExtLib Require Export
+     Extras
      Functor
      Monad
      Option.
@@ -14,6 +15,7 @@ From ITree Require Export
 From HTTP Require Export
      Message.
 Export
+  FunNotation
   FunctorNotation
   MonadNotation.
 Open Scope lazy_bool_scope.
@@ -70,9 +72,11 @@ Definition put {exp_} : path -> option (exp_ message_body) -> server_state -> se
 Definition delete {exp_} (p : path) : @server_state exp_ -> server_state :=
   filter (fun pq => (decide (p <> fst pq))).
 
+Notation var := nat.
+
 Inductive exp : Type -> Set :=
   Exp__Const : message_body -> exp message_body
-| Exp__Var   : exp message_body.
+| Exp__Var   : var -> exp message_body.
 
 Notation connT := nat.
 
@@ -118,7 +122,7 @@ Definition http_smi {E R} `{Is__smE E} : itree E R :=
            match om with
            | Some m =>
              trigger (App__Send c (Response (status_line_of_code 204) [] None));;
-             call ((p, Some (Exp__Const m))::delete p st)
+             call (put p (Some (Exp__Const m)) $ delete p st)
            | None => bad_request
            end
          | _ =>
