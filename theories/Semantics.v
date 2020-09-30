@@ -78,7 +78,7 @@ Notation connT := nat.
 
 Variant appE {exp_} : Type -> Type :=
   App__Recv : appE (connT * http_request)
-| App__Send : connT -> @http_response exp_ -> appE unit.
+| App__Send : connT -> http_response exp_ -> appE unit.
 Arguments appE : clear implicits.
 
 Variant symE {exp_} : Type -> Set :=

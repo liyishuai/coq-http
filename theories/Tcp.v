@@ -6,18 +6,20 @@ Export SumNotations.
 Open Scope nat_scope.
 Open Scope sum_scope.
 
-Definition payloadT : Set := http_request + http_response exp.
+Definition payloadT exp_ : Type := http_request + http_response exp_.
 
-Record packetT :=
+Record packetT {exp_} :=
   Packet {
       packet__src : connT;
       packet__dst : connT;
-      packet__payload : payloadT
+      packet__payload : payloadT exp_
     }.
+Arguments packetT : clear implicits.
+Arguments Packet {_}.
 
-Variant switchE : Type -> Set :=
-  Switch__In  : switchE packetT
-| Switch__Out : packetT -> switchE unit.
+Variant switchE : Type -> Type :=
+  Switch__In  : switchE (packetT exp)
+| Switch__Out : packetT exp -> switchE unit.
 
 Definition tcp {E R} `{switchE -< E} `{nondetE -< E} : itree E R :=
   (rec-fix loop in_pkt0 :=
@@ -63,7 +65,7 @@ Instance sE_Is__sE : Is__sE sE. Defined.
 Definition conn_is_app : connT -> bool := Nat.eqb 0.
 
 CoFixpoint compose' {E R} `{Is__sE E}
-           (bfi bfo : list packetT)
+           (bfi bfo : list (@packetT exp))
            (net : itree (switchE +' nondetE) R)
            (app : itree smE R) : itree E R :=
   match observe net, observe app with
