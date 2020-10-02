@@ -31,11 +31,8 @@ Record authority :=
       authority__port     : option N
     }.
 
-(** https://www.rfc-editor.org/rfc/rfc3986.html#section-3.3 *)
-Definition segment := string.
-
 (** https://httpwg.org/http-core/draft-ietf-httpbis-semantics-latest.html#uri *)
-Definition path := list segment.
+Definition path := string.
 
 (** https://www.rfc-editor.org/rfc/rfc3986.html#section-3.4 *)
 Definition query := string.

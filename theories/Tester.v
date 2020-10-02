@@ -27,7 +27,7 @@ Definition assert (x : var) (v : field_value) (s : exp_state)
   let (bs, es) := s in
   match get x es with
   | Some (inl e)  => if e =? v then Some s else None
-  | Some (inr ts) => if existsb (eqb v) ts
+  | Some (inr ts) => if existsb (String.eqb v) ts
                     then None
                     else Some (bs, put x (inl v) es)
   | None => Some (bs, put x (inl v) es)
@@ -129,7 +129,7 @@ CoFixpoint tester' {E R} `{Is__tE E} (s : exp_state) (others : list (itree oE R)
                 match os with
                 | Some s =>
                   let 'Field n vx := f in
-                  match field__value <$> find (eqb n ∘ field__name) fs with
+                  match field__value <$> find (String.eqb n ∘ field__name) fs with
                   | Some v => unify vx (v : id field_value) s
                   | None   => None
                   end

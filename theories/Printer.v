@@ -50,8 +50,8 @@ Definition authority_to_string (s : authority) : string :=
   authority__host s ++
   port_to_string (authority__port s).
 
-Definition path_to_string (p : path) : string :=
-  String "/" (String.concat "/" p).
+Definition path_to_string : path -> string :=
+  String "/".
 
 Definition oquery_to_string (oq : option query) : string :=
   match oq with

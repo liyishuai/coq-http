@@ -1,8 +1,10 @@
 -Q theories HTTP
 -arg -w -arg -solve_obligation_error
 
+theories/Common.v
 theories/Message.v
 theories/Printer.v
+theories/Parser.v
 theories/Semantics.v
 theories/Tcp.v
 theories/Observe.v
