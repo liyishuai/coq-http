@@ -58,13 +58,17 @@ Definition tcp {E R} `{switchE -< E} `{nondetE -< E} : itree E R :=
          end in
      or input output) [].
 
-Class Is__sE E `{switchE -< E} `{nondetE -< E} `{symE exp -< E}.
-Notation sE := (switchE +' nondetE +' symE exp).
-Instance sE_Is__sE : Is__sE sE. Defined.
+Variant netE : Type -> Type :=
+  Net__In  : server_state exp -> netE (packetT exp)
+| Net__Out : packetT exp -> netE unit.
+
+Class Is__nE E `{netE -< E} `{nondetE -< E} `{symE exp -< E}.
+Notation nE := (netE +' nondetE +' symE exp).
+Instance nE_Is__nE : Is__nE nE. Defined.
 
 Definition conn_is_app : connT -> bool := Nat.eqb 0.
 
-CoFixpoint compose' {E R} `{Is__sE E}
+CoFixpoint compose' {E R} `{Is__nE E}
            (bfi bfo : list (@packetT exp))
            (net : itree (switchE +' nondetE) R)
            (app : itree smE R) : itree E R :=
@@ -74,7 +78,7 @@ CoFixpoint compose' {E R} `{Is__sE E}
   | TauF net', _ => Tau (compose' bfi bfo net' app)
   | _, TauF app' => Tau (compose' bfi bfo net  app')
   | VisF vn kn, VisF va ka =>
-    let step__net :=
+    let step__net st :=
         match vn with
         | (se|) =>
           match se in switchE Y return (Y -> _) -> _ with
@@ -82,7 +86,7 @@ CoFixpoint compose' {E R} `{Is__sE E}
             fun k =>
               match bfo with
               | [] =>
-                pkt <- trigger Switch__In;;
+                pkt <- embed Net__In st;;
                 Tau (compose' bfi []  (k pkt) app)
               | pkt :: bo' =>
                 Tau (compose' bfi bo' (k pkt) app)
@@ -91,7 +95,7 @@ CoFixpoint compose' {E R} `{Is__sE E}
             fun k =>
               if conn_is_app (packet__dst pkt)
               then Tau (compose' (bfi ++ [pkt]) bfo (k tt) app)
-              else embed Switch__Out pkt;;
+              else embed Net__Out pkt;;
                    Tau (compose' bfi bfo (k tt) app)
           end kn
         | (|ne) =>
@@ -105,10 +109,10 @@ CoFixpoint compose' {E R} `{Is__sE E}
     match va with
     | (ae|) =>
       match ae in appE _ Y return (Y -> _) -> _ with
-      | App__Recv =>
+      | App__Recv st =>
         fun k =>
           match bfi with
-          | [] => step__net
+          | [] => step__net st
           | pkt :: bi' =>
             let 'Packet s _ p := pkt in
             match p with
@@ -136,6 +140,6 @@ CoFixpoint compose' {E R} `{Is__sE E}
     end
   end.
 
-Definition compose_switch {E T} `{Is__sE E} :
+Definition compose_switch {E T} `{Is__nE E} :
   itree (switchE +' nondetE) T -> itree smE T -> itree E T :=
   compose' [] [].

@@ -128,7 +128,9 @@ Record field_line exp_ :=
       field__name  : field_name;
       field__value : exp_ field_value
     }.
-Arguments Field {_}.
+Arguments Field      {_}.
+Arguments field__name  {_}.
+Arguments field__value {_}.
 
 (** https://httpwg.org/http-core/draft-ietf-httpbis-messaging-latest.html#message.body *)
 Definition message_body := string.

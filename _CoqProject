@@ -6,3 +6,4 @@ theories/Printer.v
 theories/Semantics.v
 theories/Tcp.v
 theories/Observe.v
+theories/Tester.v
