@@ -76,16 +76,16 @@ Definition http_smi {E R} `{Is__smE E} : itree E R :=
            | Some (Some (ResourceState m _)) => ok m;; call st
            | Some None => not_found;; call st
            | None =>
-             or (not_found;; call (put p None st))
+             or (not_found;; call (update p None st))
                 (mx <- trigger (@Sym__NewBody exp);;
                  ok mx;;
-                 call (put p (Some (ResourceState mx None)) st))
+                 call (update p (Some (ResourceState mx None)) st))
            end
          | Method__PUT =>
            match om with
            | Some m =>
              trigger (App__Send c (Response (status_line_of_code 204) [] None));;
-             call (put p (Some (ResourceState (Exp__Const m) None)) st)
+             call (update p (Some (ResourceState (Exp__Const m) None)) st)
            | None => bad_request
            end
          | _ =>

@@ -63,3 +63,7 @@ Definition delete {K V} `{forall x y : K, Decidable (x <> y)} (k : K) :
 
 Definition put {K V} : K -> V -> list (K * V) -> list (K * V) :=
   compose cons ∘ pair.
+
+Definition update {K V} `{forall x y : K, Decidable (x <> y)} (k : K) (v : V)
+  : list (K * V) -> list (K * V) :=
+  put k v ∘ delete k.

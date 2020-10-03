@@ -7,5 +7,7 @@ theories/Printer.v
 theories/Parser.v
 theories/Semantics.v
 theories/Tcp.v
+theories/NetUnix.v
 theories/Observe.v
 theories/Tester.v
+theories/Execute.v

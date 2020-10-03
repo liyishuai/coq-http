@@ -63,7 +63,7 @@ Variant genE : Type -> Type :=
   Gen : server_state exp -> exp_state -> genE (packetT id).
 
 Variant clientE : Type -> Type :=
-  Client__Recv : clientE (packetT id)
+| Client__Recv : clientE (option (packetT id))
 | Client__Send : packetT id -> clientE unit.
 
 Class Is__tE E `{failureE -< E} `{nondetE -< E} `{genE -< E} `{clientE -< E}.
@@ -160,8 +160,16 @@ CoFixpoint tester' {E R} `{Is__tE E} (s : exp_state) (others : list (itree oE R)
               embed Client__Send pkt;;
               Tau (tester' s (match_observe (Observe__ToServer st) pkt others) (k pkt))
       | Observe__ToClient =>
-        fun k => pkt <- trigger Client__Recv;;
-              Tau (tester' s (match_observe Observe__ToClient pkt others) (k pkt))
+        fun k => opkt <- trigger Client__Recv;;
+              match opkt with
+              | Some pkt =>
+                Tau (tester' s (match_observe Observe__ToClient pkt others) (k pkt))
+              | None =>
+                match others with
+                | []              => Tau (tester' s [] m)
+                | other :: others' => Tau (tester' s (others' ++ [m]) other)
+                end
+              end
       end k
     end
   end.
