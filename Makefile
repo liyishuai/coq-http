@@ -5,7 +5,8 @@ all: $(COQMAKEFILE)
 
 clean: $(COQMAKEFILE)
 	@+$(MAKE) -f $^ cleanall
-	@rm -f $^ $^.conf
+	@rm -f $^ $^.conf *~ *.ml*
+	@ocamlbuild -clean
 
 $(COQMAKEFILE): _CoqProject
 	$(COQBIN)coq_makefile -f $^ -o $@
