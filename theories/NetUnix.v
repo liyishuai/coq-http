@@ -54,13 +54,13 @@ Definition conn_of_fd (fd : file_descr)
   : conn_state -> option (connT * (file_descr * string)) :=
   find (file_descr_eqb fd ∘ fst ∘ snd).
 
-Definition create_conn : stateT conn_state IO file_descr :=
+Definition create_conn (c : connT) : stateT conn_state IO file_descr :=
   mkStateT
     (fun s =>
        let iaddr : inet_addr := inet_addr_loopback in
        fd <- socket PF_INET SOCK_STREAM int_zero;;
        (ADDR_INET iaddr <$> getport) >>= connect fd;;
-       ret (fd, (S (length s), (fd, "")) :: s)).
+       ret (fd, (c, (fd, "")) :: s)).
 
 Notation BUFFER_SIZE := 1024.
 
@@ -86,24 +86,33 @@ Definition recv_bytes : stateT conn_state IO unit :=
                  end)%int fds (ret s);;
        ret (tt, s')).
 
-Definition send_request (pkt : packetT id) (s : conn_state) : IO unit :=
+Instance Serialize__conn : Serialize (file_descr * string) :=
+  to_sexp ∘ snd.
+
+Definition send_request (pkt : packetT id) : stateT conn_state IO unit :=
   let 'Packet c _ p := pkt in
-  match get c s with
-  | Some (fd, _) =>
-    match p with
-    | inl req =>
-      buf <- OBytes.of_string (request_to_string req);;
-      let len : int := OBytes.length buf in
-      IO.fix_io
-        (fun send_rec o =>
-           sent <- send fd buf o (len - o)%int [];;
-           if sent <? int_zero
-           then close fd;; failwith "Send byte failed"
-           else
-             if o + sent =? len
-             then ret tt
-             else send_rec (o + sent))%int int_zero
-    | inr _ => failwith "Unexpected send response"
-    end
-  | None => failwith "Connection not found"
-  end.
+  let send_bytes fd :=
+      match p with
+      | inl req =>
+        buf <- OBytes.of_string (request_to_string req);;
+        let len : int := OBytes.length buf in
+        IO.fix_io
+          (fun send_rec o =>
+             sent <- send fd buf o (len - o)%int [];;
+             if sent <? int_zero
+             then close fd;; failwith "Send byte failed"
+             else
+               if o + sent =? len
+               then ret tt
+               else send_rec (o + sent))%int int_zero
+      | inr _ => failwith "Unexpected send response"
+      end in
+  mkStateT
+    (fun s =>
+       match get c s with
+       | Some (fd, _) => send_bytes fd;;
+                        ret (tt, s)
+       | None => '(fd, s') <- runStateT (create_conn c) s;;
+                send_bytes fd;;
+                ret (tt, s')
+       end).

@@ -14,9 +14,9 @@ HTTP specification in Coq, testable and verifiable
 
 - Author(s):
   - Yishuai Li
+  - Li-yao Xia
   - Yao Li
   - Azzam Althagafi
-  - Li-yao Xia
   - Benjamin C. Pierce
 - License: [GNU Affero General Public License v3.0 or later](LICENSE)
 - Compatible Coq versions: 8.12 or later
