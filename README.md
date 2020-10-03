@@ -24,7 +24,12 @@ HTTP specification in Coq, testable and verifiable
   - [ITreeIO](https://github.com/Lysxia/coq-itree-io)
   - [Parsec](https://github.com/liyishuai/coq-parsec)
 - Coq namespace: `HTTP`
-- Related publication(s): none
+- Related publication(s):
+  - [From C to Interaction Trees:
+    Specifying, Verifying, and Testing a Networked Server
+](https://doi.org/10.1145/3293880.3294106) doi:[10.1145/3293880.3294106](https://doi.org/10.1145/3293880.3294106)
+  - [Interaction Trees: Representing Recursive and Impure Programs in Coq
+](https://doi.org/10.1145/3371119) doi:[10.1145/3371119](https://doi.org/10.1145/3371119)
 
 ## Building and installation instructions
 

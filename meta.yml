@@ -36,3 +36,13 @@ supported_coq_versions:
 tested_coq_opam_versions:
   - version: 'dev'
   - version: '8.12'
+publications:
+  - pub_title: >
+      From C to Interaction Trees:
+          Specifying, Verifying, and Testing a Networked Server
+    pub_url: https://doi.org/10.1145/3293880.3294106
+    pub_doi: 10.1145/3293880.3294106
+  - pub_title: >
+      Interaction Trees: Representing Recursive and Impure Programs in Coq
+    pub_url: https://doi.org/10.1145/3371119
+    pub_doi: 10.1145/3371119
