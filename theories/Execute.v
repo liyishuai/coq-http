@@ -57,15 +57,15 @@ Fixpoint dup {A} (n : nat) (a : A) : list A :=
 Definition gen_string : IO string :=
   n <- nat_of_int <$> ORandom.int 5;;
   let gens : list (IO string) := dup n gen_string' in
-  fold_left (liftA2 append) gens (ret "/").
+  fold_left (liftA2 append) gens (ret "").
 
 Definition gen_request : IO http_request :=
   m <- io_or (ret Method__GET) (ret Method__PUT);;
   p <- gen_string;;
   let l : request_line := RequestLine m (RequestTarget__Origin p None) (Version 1 1) in
   match m with
-  | Method__PUT => Request l [] ∘ Some <$> gen_string
-  | _ => ret $ Request l [] None
+  | Method__PUT => Request l [Field "Host" "localhost:8000"] ∘ Some <$> gen_string
+  | _ => ret $ Request l [Field "Host" "localhost:8000"] None
   end.
 
 Fixpoint execute' {R} (fuel : nat) (s : conn_state) (m : itree tE R)
@@ -94,8 +94,14 @@ Fixpoint execute' {R} (fuel : nat) (s : conn_state) (m : itree tE R)
             p <- Packet c 0 ∘ inl <$> gen_request;;
             execute' fuel s (k p)
         end k
-      | (|||ce) => '(r, s') <- runStateT (client_io _ ce) s;;
-                  execute' fuel s (k r)
+      | (|||le|) =>
+        match le in logE Y return (Y -> _) -> _ with
+        | Log str =>
+          fun k => prerr_endline ("Tester: " ++ str);;
+                execute' fuel s (k tt)
+        end k
+      | (||||ce) => '(r, s') <- runStateT (client_io _ ce) s;;
+                  execute' fuel s' (k r)
       end
     end
   end.

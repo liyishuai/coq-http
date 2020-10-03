@@ -89,14 +89,7 @@ Definition parseFieldVchar : parser ascii :=
   satisfy $ fun a => isvchar a ||| isobstext a.
 
 Definition parseFieldValue : parser field_value :=
-  concat "" <$>
-         (many $
-               liftA2 String parseFieldVchar $
-               liftA2 append (string_of_list_ascii
-                                <$> many1 (parseSP
-                                             <|> parseHTAB
-                                             <|> parseFieldVchar))
-               (flip String "" <$> parseFieldVchar) <|> ret "").
+  string_of_list_ascii <$> (many $ parseSP <|> parseHTAB <|> parseFieldVchar).
 
 (** https://httpwg.org/http-core/draft-ietf-httpbis-semantics-latest.html#rfc.section.5.7.2 *)
 Definition istchar (a : ascii) : bool :=

@@ -6,6 +6,20 @@ From HTTP Require Export
 Open Scope N_scope.
 Open Scope string_scope.
 
+Instance Serialize__payloadT : Serialize (payloadT id) :=
+  fun p =>
+    match p with
+    | inl r => Atom $ request_to_string  r
+    | inr r => Atom $ response_to_string r
+    end.
+
+Instance Serialize__packetT : Serialize (packetT id) :=
+  fun pkt =>
+    let 'Packet s d p := pkt in
+    [[Atom "Src"; to_sexp s];
+    [Atom "Dst"; to_sexp d];
+    [Atom "Msg"; to_sexp p]]%sexp.
+
 Definition exp_state : Set := list (var * option message_body) *
                               list (var * (field_value + list field_value)).
 
@@ -66,8 +80,12 @@ Variant clientE : Type -> Type :=
 | Client__Recv : clientE (option (packetT id))
 | Client__Send : packetT id -> clientE unit.
 
-Class Is__tE E `{failureE -< E} `{nondetE -< E} `{genE -< E} `{clientE -< E}.
-Notation tE := (failureE +' nondetE +' genE +' clientE).
+Variant logE : Type -> Set :=
+  Log : string -> logE unit.
+
+Class Is__tE E `{failureE -< E} `{nondetE -< E}
+      `{genE -< E} `{logE -< E} `{clientE -< E}.
+Notation tE := (failureE +' nondetE +' genE +' logE +' clientE).
 Instance tE_Is__tE : Is__tE tE. Defined.
 
 CoFixpoint match_event {T R} (e0 : observeE R) (r : R) (m : itree oE T)
@@ -99,7 +117,9 @@ CoFixpoint tester' {E R} `{Is__tE E} (s : exp_state) (others : list (itree oE R)
     let catch (err : string) : itree E R :=
         match others with
         | [] => throw err
-        | other :: others' => Tau (tester' s others' other)
+        | other :: others' =>
+          embed Log ("Retry upon " ++ err);;
+          Tau (tester' s others' other)
         end in
     match e with
     | (Throw err|) => catch err
