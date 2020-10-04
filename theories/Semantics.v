@@ -73,90 +73,118 @@ Class Is__smE E `{appE exp -< E} `{nondetE -< E} `{logE -< E} `{symE exp -< E}.
 Notation smE := (appE exp +' nondetE +' logE +' symE exp).
 Instance smE_Is__smE : Is__smE smE. Defined.
 
-Definition http_smi {E R} `{Is__smE E} : itree E R :=
-  rec
-    (fun st : server_state exp =>
-       '(c, Request (RequestLine methd t _) hs om) <- embed App__Recv st;;
-       let send_code (sc : status_code) (fs : list (field_line exp))
-                     (b : option (exp message_body)) :=
-           trigger (App__Send c (Response (status_line_of_code sc) [] b)) in
-       let watvalue {T} (mx : exp T) : exp field_value :=
-           match mx in exp _ with
-           | Exp__Const b => Exp__Const b
-           | Exp__ETag  v => Exp__ETag v
-           | Exp__Body  _
-           | Exp__Match _ _ => Exp__Const ""
-           end in
-       let watbody {T} (mx : exp T) : exp message_body :=
-           match mx in exp _ with
-           | Exp__Const b => Exp__Const b
-           | Exp__Body  v => Exp__Body v
-           | Exp__ETag  _
-           | Exp__Match _ _ => Exp__Const ""
-           end in
-       let ok (ot : option (exp field_value)) (m : exp message_body) :=
-           or (send_code 200 [] (Some m);; ret None)
-              (t <- match ot with
-                   | Some t => ret t
-                   | None => watvalue <$> embed (@Sym__NewETag exp)
-                   end;;
-               send_code 200 [Field "ETag" t] (Some m);;
-               ret (Some t)) in
-       let created' mx :=
-           (* or (t <- watvalue <$> embed (@Sym__NewETag exp);; *)
-           (*     send_code 201 [Field "ETag" t] None;; *)
-           (*     ret (Some t)) *)
-              (send_code 201 [] None;; ret None) in
-       let created :=
-           (* or (created' None) *)
-              (mx <- watbody <$> embed (@Sym__NewBody exp);;
-               created' (Some mx)) in
-       let no_content :=
-           or (send_code 204 [] None;; ret None)
-              (t <- watvalue <$> embed (@Sym__NewETag exp);;
-               send_code 204 [Field "ETag" t] None;;
-               ret (Some t)) in
-       let bad_request := send_code 400 [] None in
-       let not_found :=
-           or (send_code 404 [] None)
-              (mx <- watbody <$> embed (@Sym__NewBody exp);;
-               send_code 404 [] (Some mx))in
-       match t with
-       | RequestTarget__Origin p _
-       | RequestTarget__Absolute _ _ p _ =>
-         match methd with
-         | Method__GET =>
-           (* embed Log ("State before GET: " ++ to_string st);; *)
-           match get p st with
-           | Some (Some (ResourceState m ot)) =>
-             ot' <- ok ot m;;
-             call (update p (Some (ResourceState m ot')) st)
-           | Some None =>
-             (* embed Log (p ++ " is known as not found");; *)
-             not_found;; call st
-           | None =>
-             (* embed Log (p ++ " is unknown");; *)
-             or (not_found;; call (update p None st))
-                (mx <- watbody <$> embed (@Sym__NewBody exp);;
-                 ot <- ok None mx;;
-                 call (update p (Some (ResourceState mx ot)) st))
-           end
-         | Method__PUT
-         | Method__POST =>
-           match om with
-           | Some m =>
-             (* embed Log ("State before PUT: " ++ to_string st);; *)
-             ot <-
-             match get p st with
-             | Some (Some _) => no_content
-             | Some None     => created
-             | None          => or created no_content
-             end;;
-             call (update p (Some (ResourceState (Exp__Const m) ot)) st)
-           | None => bad_request;; call st
-           end
-         | _ =>
-           send_code 405 [] None;; call st
-         end
-       | _ => bad_request;; call st
-       end)%string [].
+Definition iter_forever {E : Type -> Type} {A : Type} (f : A -> itree E A)
+  : A -> itree E void :=
+  ITree.iter (fun a => inl <$> f a).
+
+Section HTTP_SMI.
+
+Context {E} `{Is__smE E}.
+
+Section AfterConn.
+
+Context (c : connT).
+
+Definition send_code (sc : status_code) (fs : list (field_line exp))
+                     (b : option (exp message_body)) : itree E unit :=
+  trigger (App__Send c (Response (status_line_of_code sc) [] b)).
+
+
+Definition ok (ot : option (exp field_value)) (m : exp message_body) :=
+  or (send_code 200 [] (Some m);; ret None)
+     (t <- match ot with
+          | Some t => ret t
+          | None => embed (@Sym__NewETag exp)
+          end;;
+      send_code 200 [Field "ETag" t] (Some m);;
+      ret (Some t)).
+
+Definition created' (mx : option (exp message_body)) : itree E (option (exp field_value)) :=
+(* or (t <- watvalue <$> embed (@Sym__NewETag exp);; *)
+(*     send_code 201 [Field "ETag" t] None;; *)
+(*     ret (Some t)) *)
+  (send_code 201 [] None;; ret None).
+
+Definition created : itree E (option (exp field_value)) :=
+(* or (created' None) *)
+  (mx <- embed (@Sym__NewBody exp);;
+   created' (Some mx)).
+
+Definition no_content : itree E (option (exp field_value)) :=
+  or (send_code 204 [] None;; ret None)
+     (t <- trigger (@Sym__NewETag exp);;
+      send_code 204 [Field "ETag" t] None;;
+      ret (Some t)).
+
+Definition bad_request : itree E unit := send_code 400 [] None.
+Definition not_found : itree E unit :=
+  or (send_code 404 [] None)
+     (mx <- embed (@Sym__NewBody exp);;
+      send_code 404 [] (Some mx)).
+
+Section LoopBody.
+
+Context (st : server_state exp) (methd : request_method) (t : request_target)
+   (om : option message_body).
+
+Section TargetAbsolute.
+
+Context (p : path).
+
+Definition http_smi_get_body : itree E (server_state exp) :=
+  (* embed Log ("State before GET: " ++ to_string st);; *)
+  match get p st with
+  | Some (Some (ResourceState m ot)) =>
+    ot' <- ok ot m;;
+    ret (update p (Some (ResourceState m ot')) st)
+  | Some None =>
+    (* embed Log (p ++ " is known as not found");; *)
+    not_found;; ret st
+  | None =>
+    (* embed Log (p ++ " is unknown");; *)
+    or (not_found;; ret (update p None st))
+       (mx <- embed (@Sym__NewBody exp);;
+        ot <- ok None mx;;
+        ret (update p (Some (ResourceState mx ot)) st))
+  end.
+
+(* PUT or POST *)
+Definition http_smi_put_body : itree E (server_state exp) :=
+  match om with
+  | Some m =>
+    (* embed Log ("State before PUT: " ++ to_string st);; *)
+    ot <-
+    match get p st with
+    | Some (Some _) => no_content
+    | Some None     => created
+    | None          => or created no_content
+    end;;
+    ret (update p (Some (ResourceState (Exp__Const m) ot)) st)
+  | None => bad_request;; ret st
+  end.
+
+End TargetAbsolute.
+
+Definition http_smi_body : itree E (server_state exp) :=
+  match t with
+  | RequestTarget__Origin p _
+  | RequestTarget__Absolute _ _ p _ =>
+    match methd with
+    | Method__GET => http_smi_get_body p
+    | Method__PUT
+    | Method__POST => http_smi_put_body p
+    | _ =>
+      send_code 405 [] None;; ret st
+    end
+  | _ => bad_request;; ret st
+  end.
+
+End LoopBody.
+End AfterConn.
+
+Definition http_smi : itree E void :=
+  iter_forever (fun st : server_state exp =>
+    '(c, Request (RequestLine methd t _) hs om) <- embed App__Recv st;;
+    http_smi_body c st methd t om) [].
+
+End HTTP_SMI.
