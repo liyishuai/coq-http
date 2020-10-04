@@ -44,11 +44,7 @@ Definition io_or {A} (x y : IO A) : IO A :=
   if b : bool then x else y.
 
 Definition gen_string' : IO string :=
-  io_choose "" ["hello";
-               "world";
-               "foobar";
-               "abcde";
-               "LEFTOVER"].
+  io_choose "" ["Hello"; "World"; "Foo"; "Bar"].
 
 Fixpoint dup {A} (n : nat) (a : A) : list A :=
   match n with
@@ -61,17 +57,23 @@ Definition gen_string : IO string :=
   let gens : list (IO string) := dup (S n) gen_string' in
   fold_left (liftA2 append) gens (ret "").
 
-Definition gen_request : IO http_request :=
-  m <- io_or (ret Method__GET) (ret Method__PUT);;
+Definition gen_path (s : server_state exp) : IO path :=
+  let paths : list path := map fst s in
   p <- gen_string;;
+  io_choose p (p::paths).
+
+Definition gen_request (s : server_state exp) : IO http_request :=
+  m <- io_or (ret Method__GET) (ret Method__PUT);;
+  p <- gen_path s;;
   let l : request_line :=
       RequestLine m (RequestTarget__Origin p None) (Version 1 1) in
   match m with
   | Method__PUT =>
-    str <- gen_string;;
+    str0 <- gen_string;;
+    let str1 : string := p ++ ": " ++ str0 in
     ret (Request l [Field "Host" "localhost:8000";
-                   Field "Content-Length" (to_string $ String.length str)]
-                 (Some str))
+                   Field "Content-Length" (to_string $ String.length str1)]
+                 (Some str1))
   | _ => ret $ Request l [Field "Host" "localhost:8000"] None
   end.
 
@@ -95,10 +97,10 @@ Fixpoint execute' {R} (fuel : nat) (s : conn_state) (m : itree tE R)
         end k
       | (||ge|) =>
         match ge in genE Y return (Y -> _) -> _ with
-        | Gen _ _ =>
+        | Gen ss _ =>
           fun k =>
             c <- io_choose 1%nat (map fst s);;
-            p <- Packet c 0 ∘ inl <$> gen_request;;
+            p <- Packet c 0 ∘ inl <$> gen_request ss;;
             execute' fuel s (k p)
         end k
       | (|||le|) =>

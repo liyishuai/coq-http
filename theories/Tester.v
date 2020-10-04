@@ -20,6 +20,10 @@ Instance Serialize__packetT : Serialize (packetT id) :=
     [Atom "Dst"; to_sexp d];
     [Atom "Msg"; to_sexp p]]%sexp.
 
+Instance Serialize__field : Serialize (field_line exp) :=
+  fun f => let 'Field n v := f in
+        [to_sexp n; to_sexp v]%sexp.
+
 Definition exp_state : Set := N * list (var * option message_body) *
                               list (var * (field_value + list field_value)).
 
@@ -36,40 +40,49 @@ Definition fresh_etag (s : exp_state) : exp_state * var :=
   (bs, (x, inr []) :: es, x).
 
 Definition assert (x : var) (v : field_value) (s : exp_state)
-  : option exp_state :=
+  : string + exp_state :=
   let '(n, bs, es) := s in
-  match get x es with
-  | Some (inl e)  => if e =? v then Some s else None
+  let fx  := get x es in
+  let err := inl $ "Expect " ++ to_string fx
+                 ++ ", but observed " ++ to_string v in
+  match fx with
+  | Some (inl e)  => if e =? v then inr s else err
   | Some (inr ts) => if existsb (String.eqb v) ts
-                    then None
-                    else Some (n, bs, put x (inl v) es)
-  | None => Some (n, bs, put x (inl v) es)
+                    then err
+                    else inr (n, bs, put x (inl v) es)
+  | None => inr (n, bs, put x (inl v) es)
   end.
 
 Definition assert_not (x : var) (v : field_value) (s : exp_state)
-  : option exp_state :=
+  : string + exp_state :=
   let '(n, bs, es) := s in
-  match get x es with
-  | Some (inl e) => if e =? v then None else Some s
-  | Some (inr ts) => Some (n, bs, put x (inr (v :: ts)) es)
-  | None          => Some (n, bs, put x (inr [v]) es)
+  let '(n, bs, es) := s in
+  let fx  := get x es in
+  let err := inl $ "Expect not " ++ to_string fx
+                 ++ ", but observed " ++ to_string v in
+  match fx with
+  | Some (inl e) => if e =? v then err else inr s
+  | Some (inr ts) => inr (n, bs, put x (inr (v :: ts)) es)
+  | None          => inr (n, bs, put x (inr [v]) es)
   end.
 
-Definition unify {T} (e : exp T) (v : T) (s : exp_state) : option exp_state :=
-  match e in exp T return T -> exp_state -> option exp_state with
-  | Exp__Const m => fun v s => if m =? v then Some s else None
+Definition unify {T} (e : exp T) (v : T) (s : exp_state) : string + exp_state :=
+  let err {T} `{Serialize T} (v' : T) :=
+      inl $ "Expect " ++ to_string e ++ ", but observed " ++ to_string v' in
+  match e in exp T return T -> exp_state -> string + exp_state with
+  | Exp__Const m => fun v s => if m =? v then inr s else err v
   | Exp__Body x =>
     fun v s =>
       let '(n, bs, es) := s in
       match get x bs with
-      | Some (Some b) => if b =? v then Some s else None
-      | Some None     => None
-      | None          => Some (n, put x (Some v) bs, es)
+      | Some (Some b) => if b =? v then inr s else err v
+      | Some None     => err v
+      | None          => inr (n, put x (Some v) bs, es)
       end
   | Exp__ETag x => assert x
   | Exp__Match f (Exp__ETag x) =>
     fun v => if v then assert x f else assert_not x f
-  | Exp__Match _ _ => fun _ _ => None
+  | Exp__Match _ _ => fun v _ => err v
   end v s.
 
 Variant genE : Type -> Type :=
@@ -140,33 +153,32 @@ CoFixpoint tester' {E R} `{Is__tE E} (s : exp_state) (others : list (itree oE R)
           let 'Response (Status _ c  _ as st ) fs ob  := r  in
           if cx = c?
           then
-            let unify_field (os : option exp_state) (f : field_line exp)
-                : option exp_state :=
+            let unify_field (os : string + exp_state) (f : field_line exp)
+                : string + exp_state :=
                 match os with
-                | Some s =>
+                | inr s =>
                   let 'Field n vx := f in
                   match field__value <$> find (String.eqb n ∘ field__name) fs with
                   | Some v => unify vx (v : id field_value) s
-                  | None   => None
+                  | None   => inl $ to_string f ++ " not found in "
+                                 ++ fields_to_string fs
                   end
-                | None => None
+                | inl err => inl err
                 end in
-            let os1 : option exp_state := fold_left unify_field fx (Some s) in
+            let os1 : string + exp_state := fold_left unify_field fx (inr s) in
             match os1 with
-            | Some s1 =>
+            | inr s1 =>
               match obx, ob with
               | Some bx, Some b =>
                 match unify bx b s1 with
-                | Some s2 => Tau (tester' s2 others (k tt))
-                | None    => catch $ "Expect message: " ++ to_string bx
-                                  ++ ", but observed: " ++ b
-                                  ++ ", under state: " ++ to_string s1
+                | inr s2  => Tau (tester' s2 others (k tt))
+                | inl err => catch $ "Unify message failed: " ++ err
                 end
               | Some _, None => catch "Expect message body, but not found."
               | None, Some _ => catch "Expect no message body, but observed it."
               | None, None => Tau (tester' s1 others (k tt))
               end
-            | None => catch "Field lines unsatisfying."
+            | inl err => catch $ "Unify field failed: " ++ err
             end
           else catch $ "Expect status " ++ status_to_string stx
                     ++ " but observed " ++ status_to_string st

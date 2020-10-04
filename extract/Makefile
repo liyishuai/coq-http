@@ -9,7 +9,7 @@ $(COQMAKEFILE): _CoqProject
 
 clean: $(COQMAKEFILE)
 	@+$(MAKE) -f $^ cleanall
-	@rm -f $^ $^.conf *~ *.ml*
+	@rm -f $^ $^.conf *~ *.ml* *.log
 	@ocamlbuild -clean
 
 %.native:
@@ -20,10 +20,11 @@ clean: $(COQMAKEFILE)
 
 stop:
 	-if [ $$(which docker) ]; \
-		then docker rm -f apache; \
+		then docker rm -f server; \
 	fi
 
 SERVER?=ysli/apache
+PORT?=8000
 
 server: stop
 	if [ $$(which docker) ]; \
@@ -34,4 +35,4 @@ server: stop
 	fi
 
 test: all server
-	./TestHttp.native 2> tester.log
+	./TestHttp.native 2> client.log
