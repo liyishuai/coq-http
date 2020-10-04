@@ -17,7 +17,9 @@ Fixpoint findResponse (s : conn_state)
                ++ to_string c ++ ", error message: " ++ err
     | inl None => '(op, t') <- findResponse t;;
                  ret (op, cfs :: t')
-    | inr (r, str') => ret (Some (Packet 0 c (inr r)), (c, (f, str')) :: t)
+    | inr (r, str') =>
+      prerr_endline ("recv: " ++ response_to_string r);;
+      ret (Some (Packet 0 c (inr r)), (c, (f, str')) :: t)
     end
   end.
 
@@ -42,7 +44,7 @@ Definition io_or {A} (x y : IO A) : IO A :=
   if b : bool then x else y.
 
 Definition gen_string' : IO string :=
-  io_choose "" ["hello/";
+  io_choose "" ["hello";
                "world";
                "foobar";
                "abcde";
@@ -55,16 +57,21 @@ Fixpoint dup {A} (n : nat) (a : A) : list A :=
   end.
 
 Definition gen_string : IO string :=
-  n <- nat_of_int <$> ORandom.int 5;;
-  let gens : list (IO string) := dup n gen_string' in
+  n <- nat_of_int <$> ORandom.int 2;;
+  let gens : list (IO string) := dup (S n) gen_string' in
   fold_left (liftA2 append) gens (ret "").
 
 Definition gen_request : IO http_request :=
   m <- io_or (ret Method__GET) (ret Method__PUT);;
   p <- gen_string;;
-  let l : request_line := RequestLine m (RequestTarget__Origin p None) (Version 1 1) in
+  let l : request_line :=
+      RequestLine m (RequestTarget__Origin p None) (Version 1 1) in
   match m with
-  | Method__PUT => Request l [Field "Host" "localhost:8000"] ∘ Some <$> gen_string
+  | Method__PUT =>
+    str <- gen_string;;
+    ret (Request l [Field "Host" "localhost:8000";
+                   Field "Content-Length" (to_string $ String.length str)]
+                 (Some str))
   | _ => ret $ Request l [Field "Host" "localhost:8000"] None
   end.
 

@@ -94,7 +94,8 @@ Definition send_request (pkt : packetT id) : stateT conn_state IO unit :=
   let send_bytes fd :=
       match p with
       | inl req =>
-        buf <- OBytes.of_string (request_to_string req);;
+        let str : string := request_to_string req in
+        buf <- OBytes.of_string str;;
         let len : int := OBytes.length buf in
         IO.fix_io
           (fun send_rec o =>
@@ -104,7 +105,8 @@ Definition send_request (pkt : packetT id) : stateT conn_state IO unit :=
              else
                if o + sent =? len
                then ret tt
-               else send_rec (o + sent))%int int_zero
+               else send_rec (o + sent))%int int_zero;;
+        prerr_endline ("sent: " ++ str)
       | inr _ => failwith "Unexpected send response"
       end in
   mkStateT

@@ -58,39 +58,48 @@ Definition http_smi {E R} `{Is__smE E} : itree E R :=
   rec
     (fun st : server_state exp =>
        '(c, Request (RequestLine methd t _) hs om) <- embed App__Recv st;;
-       let bad_request :=
-           trigger (App__Send c (Response (status_line_of_code 400) [] None));;
-           call st in
+       let send_code (sc : status_code) (b : option (exp message_body)) :=
+           trigger (App__Send c (Response (status_line_of_code sc) [] b)) in
+       let ok (m : exp message_body)        := send_code 200 $ Some m in
+       let created     := send_code 201 None     in
+       let no_content  := send_code 204 None     in
+       let bad_request := send_code 400 None     in
+       let not_found   := send_code 404 None     in
        match t with
        | RequestTarget__Origin p _
        | RequestTarget__Absolute _ _ p _ =>
          match methd with
          | Method__GET =>
-           let not_found :=
-               trigger (App__Send c (Response (status_line_of_code 404) [] None))
-           in
-           let ok m :=
-               trigger (App__Send c (@Response exp (status_line_of_code 200)
-                                             [] (Some m))) in
            match get p st with
            | Some (Some (ResourceState m _)) => ok m;; call st
            | Some None => not_found;; call st
            | None =>
              or (not_found;; call (update p None st))
-                (mx <- trigger (@Sym__NewBody exp);;
-                 ok mx;;
-                 call (update p (Some (ResourceState mx None)) st))
+                (mx <- embed (@Sym__NewBody exp);;
+                 let mx' : exp message_body :=
+                     match mx in exp message_body with
+                     | Exp__Const b => Exp__Const b
+                     | Exp__Body  v => Exp__Body v
+                     | Exp__ETag  _
+                     | Exp__Match _ _ => Exp__Const ""
+                     end in     (* WAT *)
+                 ok mx';;
+                 call (update p (Some (ResourceState mx' None)) st))
            end
-         | Method__PUT =>
+         | Method__PUT
+         | Method__POST =>
            match om with
            | Some m =>
-             trigger (App__Send c (Response (status_line_of_code 204) [] None));;
+             match get p st with
+             | Some (Some _) => no_content
+             | Some None     => created
+             | None          => or created no_content
+             end;;
              call (update p (Some (ResourceState (Exp__Const m) None)) st)
-           | None => bad_request
+           | None => bad_request;; call st
            end
          | _ =>
-           trigger (App__Send c (Response (status_line_of_code 405) [] None));;
-           call st
+           send_code 405 None;; call st
          end
-       | _ => bad_request
+       | _ => bad_request;; call st
        end) [].
