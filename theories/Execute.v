@@ -120,5 +120,5 @@ Definition execute {R} (m : itree tE R) : IO bool :=
   fold_left (fun m fd => OUnix.close fd;; m) (map (fst ∘ snd) s) (ret tt);;
   ret b.
 
-Definition test {R} : itree smE R -> IO bool :=
+Fail Definition test {R} : itree smE R -> IO bool :=
   execute ∘ tester ∘ observer ∘ compose_switch tcp.

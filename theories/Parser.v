@@ -1,11 +1,14 @@
 From ExtLib Require Export
      Applicative
+     OptionMonad
      Reducible.
 From Parsec Require Export
      Core.
 From HTTP Require Export
-     Common
-     Message.
+     Message
+     Common.
+From Coq Require Import
+     String.
 Export
   ApplicativeNotation.
 
@@ -102,6 +105,25 @@ Definition parseToken : parser string :=
 Definition parseOWS : parser unit :=
   many (parseSP <|> parseHTAB);; ret tt.
 
+(** https://httpwg.org/http-core/draft-ietf-httpbis-semantics-latest.html#rfc.section.7.9.3.2 *)
+Definition isetagc (a : ascii) : bool :=
+  ((a =? "033") ||| ("035" <=? a) &&& (a <=? "126") ||| isobstext a)%char.
+
+Definition parseEntityTag : parser field_value :=
+  liftA2 append
+         (weak <- maybe (expectString "W/");;
+          match weak with
+          | Some w => ret w
+          | None   => ret ""
+          end)
+         (liftA2 String parseDQUOTE $
+                 liftA2 append (string_of_list_ascii
+                                  <$> (many $ satisfy isetagc)) $
+                 flip String "" <$> parseDQUOTE).
+
+Definition parseCSV {T} (p : parser T) : parser (list T) :=
+  liftA2 cons p $ many (parseOWS;; firstExpect ","%char (parseOWS;; p)).
+
 (** https://httpwg.org/http-core/draft-ietf-httpbis-messaging-latest.html#rfc.section.2.3 *)
 Definition parseVersion : parser http_version :=
   expectString "HTTP/";;
@@ -164,11 +186,15 @@ Definition parseFieldLines : parser (list (field_line id)) :=
   many (l <- parseFieldLine;; parseCRLF;; ret l).
 
 (** https://httpwg.org/http-core/draft-ietf-httpbis-messaging-latest.html#rfc.section.6 *)
+Definition findField {exp_} (n : field_name) (fs : list (field_line exp_))
+  : option (exp_ field_value) :=
+  field__value <$> find (fun f => fold (String ∘ tolower) "" (field__name f) =?
+                             fold (String ∘ tolower) "" n) fs.
+
 Definition parseBody (fs : list (field_line id))
   : parser (option message_body) :=
-  match find (fun f => fold (String ∘ tolower) "" (field__name f)
-                    =? "content-length") fs with
-  | Some (Field _ v) =>
+  match findField "Content-Length" fs with
+  | Some v =>
     match parse parseDec v with
     | inl _
     | inr (_, String _ _) => raise $ Some "Content-Length not a number."

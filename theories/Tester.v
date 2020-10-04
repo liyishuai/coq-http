@@ -39,6 +39,8 @@ Definition fresh_etag (s : exp_state) : exp_state * var :=
   let x := fresh_var es in
   (bs, (x, inr []) :: es, x).
 
+(** https://httpwg.org/http-core/draft-ietf-httpbis-semantics-latest.html#rfc.section.7.9.3.2 *)
+(* TODO: Strong vs weak comparison. *)
 Definition assert (x : var) (v : field_value) (s : exp_state)
   : string + exp_state :=
   let '(n, bs, es) := s in
@@ -85,6 +87,111 @@ Definition unify {T} (e : exp T) (v : T) (s : exp_state) : string + exp_state :=
   | Exp__Match _ _ => fun v _ => err v
   end v s.
 
+Variant testerE : Type -> Type :=
+  Tester__Recv : testerE (packetT id)
+| Tester__Send : server_state exp -> exp_state -> testerE (packetT id).
+
+Class Is__stE E `{failureE -< E} `{nondetE -< E}
+      `{decideE -< E} `{logE -< E} `{testerE -< E}.
+Notation stE := (failureE +' nondetE +' decideE +' logE +' testerE).
+Instance stE_Is__stE : Is__stE stE. Defined.
+
+Definition instantiate_unify {E A} `{Is__stE E} (e : unifyE A)
+  : Monads.stateT exp_state (itree E) A :=
+  fun s =>
+    match e with
+    | Unify__FreshBody =>
+      let '(x, bs, fs) := fresh_body s in
+      Ret ((x, bs, fs), Exp__Body x)
+    | Unify__FreshETag =>
+      let (s', x) := fresh_etag s in
+      Ret (s', Exp__ETag x)
+    | Unify__Response rx r =>
+      let 'Response (Status _ cx _ as stx) fx obx := rx in
+      let 'Response (Status _ c  _ as st ) fs ob  := r  in
+      if cx = c?
+      then
+        let unify_field (os : string + exp_state) (f : field_line exp)
+            : string + exp_state :=
+            match os with
+            | inr s =>
+              let 'Field n vx := f in
+              match field__value <$> find (String.eqb n ∘ field__name) fs with
+              | Some v => unify vx (v : id field_value) s
+              | None   => inl $ to_string f ++ " not found in "
+                             ++ fields_to_string fs
+              end
+            | inl err => inl err
+            end in
+        let os1 : string + exp_state := fold_left unify_field fx (inr s) in
+        match os1 with
+        | inr s1 =>
+          match obx, ob with
+          | Some bx, Some b =>
+            match unify bx b s1 with
+            | inr s2  => Ret (s2, tt)
+            | inl err => throw $ "Unify message failed: " ++ err
+            end
+          | Some _, None => throw "Expect message body, but not found."
+          | None, Some _ => throw "Expect no message body, but observed it."
+          | None, None   => Ret (s1, tt)
+          end
+        | inl err => throw $ "Unify field failed: " ++ err
+        end
+      else throw $ "Expect status " ++ status_to_string stx
+                 ++ " but observed " ++ status_to_string st
+    | Unify__Match bx b =>
+      match unify bx b s with
+      | inr s1  => Ret (s1, tt)
+      | inl err => throw $ "Unify If-Match failed: " ++ err
+      end
+    end.
+
+Definition instantiate_observe {E A} `{Is__stE E} (e : observeE A)
+  : Monads.stateT exp_state (itree E) A :=
+  fun s =>
+    match e with
+    | Observe__ToServer st => pkt <- embed Tester__Send st s;; Ret (s, pkt)
+    | Observe__ToClient => pkt <- trigger Tester__Recv;; Ret (s, pkt)
+    end.
+
+Definition liftState {S A} {F : Type -> Type} `{Functor F} (aF : F A)
+  : Monads.stateT S F A :=
+  fun s : S => pair s <$> aF.
+
+Definition unifier {E R} `{decideE -< E} `{Is__stE E} (m : itree oE R)
+  : Monads.stateT exp_state (itree E) R :=
+  interp (fun _ e =>
+            match e with
+            | (|||ue|)  => instantiate_unify   ue
+            | (|||||oe) => instantiate_observe oe
+            | (e|)
+            | (|e|)
+            | (||e|)
+            | (||||e|) => @liftState exp_state _ (itree _) _ (trigger e)
+            end) m.
+Fail Timeout 1 Check unifier.
+
+CoFixpoint match_event {T R} (e0 : testerE R) (r : R) (m : itree stE T)
+  : itree stE T :=
+  match observe m with
+  | RetF x  => Ret x
+  | TauF m' => Tau (match_event e0 r m')
+  | VisF e k =>
+    match e with
+    | (||||oe) =>
+      match oe in testerE Y, e0 in testerE R return (Y -> _) -> R -> _ with
+      | Tester__Send _ _, Tester__Send _ _
+      | Tester__Recv    , Tester__Recv => id
+      | _, _ => fun _ _ => throw "Unexpected event"
+      end k r
+    | _ => vis e (match_event e0 r ∘ k)
+    end
+  end.
+
+Definition match_observe {T R} (e : testerE T) (r : T) (l : list (itree stE R))
+  : list (itree stE R) := map (match_event e r) l.
+
 Variant genE : Type -> Type :=
   Gen : server_state exp -> exp_state -> genE (packetT id).
 
@@ -97,118 +204,60 @@ Class Is__tE E `{failureE -< E} `{nondetE -< E}
 Notation tE := (failureE +' nondetE +' genE +' logE +' clientE).
 Instance tE_Is__tE : Is__tE tE. Defined.
 
-CoFixpoint match_event {T R} (e0 : observeE R) (r : R) (m : itree oE T)
-  : itree oE T :=
-  match observe m with
-  | RetF x  => Ret x
-  | TauF m' => Tau (match_event e0 r m')
-  | VisF e k =>
-    match e with
-    | (|||||oe) =>
-      match oe in observeE Y, e0 in observeE R return (Y -> _) -> R -> _ with
-      | Observe__ToServer _, Observe__ToServer _
-      | Observe__ToClient, Observe__ToClient => id
-      | _, _ => fun _ _ => throw "Unexpected event"
-      end k r
-    | _ => vis e (match_event e0 r ∘ k)
-    end
-  end.
-
-Definition match_observe {T R} (e : observeE T) (r : T) (l : list (itree oE R))
-  : list (itree oE R) := map (match_event e r) l.
-
-CoFixpoint tester' {E R} `{Is__tE E} (s : exp_state) (others : list (itree oE R))
-           (m : itree oE R) : itree E R :=
+CoFixpoint backtrack' {E R} `{Is__tE E} (others : list (itree stE R))
+           (m : itree stE R) : itree E R :=
   match observe m with
   | RetF r => Ret r
-  | TauF m' => Tau (tester' s others m')
+  | TauF m' => Tau (backtrack' others m')
   | VisF e k =>
     let catch (err : string) : itree E R :=
         match others with
         | [] => throw err
         | other :: others' =>
           embed Log ("Retry upon " ++ err);;
-          Tau (tester' s others' other)
+          Tau (backtrack' others' other)
         end in
     match e with
     | (Throw err|) => catch err
     | (|ne|) =>
       match ne in nondetE Y return (Y -> _) -> _ with
-      | Or => fun k => b <- trigger Or;; Tau (tester' s others (k b))
+      | Or => fun k => b <- trigger Or;; Tau (backtrack' others (k b))
       end k
     | (||de|) =>
       match de in decideE Y return (Y -> _) -> _ with
       | Decide => fun k => b <- trigger Or;;
-                       Tau (tester' s (k (negb b) :: others) (k b))
+                       Tau (backtrack' (k (negb b) :: others) (k b))
       end k
-    | (|||ue|) =>
-      match ue in unifyE Y return (Y -> _) -> _ with
-      | Unify__FreshBody => fun k => let '(x, bs, fs) := fresh_body s in
-                               Tau (tester' (x, bs, fs) others (k (Exp__Body x)))
-      | Unify__FreshETag => fun k => let (s', x) := fresh_etag s in
-                               Tau (tester' s' others (k (Exp__ETag x)))
-      | Unify__Response rx r =>
-        fun k =>
-          let 'Response (Status _ cx _ as stx) fx obx := rx in
-          let 'Response (Status _ c  _ as st ) fs ob  := r  in
-          if cx = c?
-          then
-            let unify_field (os : string + exp_state) (f : field_line exp)
-                : string + exp_state :=
-                match os with
-                | inr s =>
-                  let 'Field n vx := f in
-                  match field__value <$> find (String.eqb n ∘ field__name) fs with
-                  | Some v => unify vx (v : id field_value) s
-                  | None   => inl $ to_string f ++ " not found in "
-                                 ++ fields_to_string fs
-                  end
-                | inl err => inl err
-                end in
-            let os1 : string + exp_state := fold_left unify_field fx (inr s) in
-            match os1 with
-            | inr s1 =>
-              match obx, ob with
-              | Some bx, Some b =>
-                match unify bx b s1 with
-                | inr s2  => Tau (tester' s2 others (k tt))
-                | inl err => catch $ "Unify message failed: " ++ err
-                end
-              | Some _, None => catch "Expect message body, but not found."
-              | None, Some _ => catch "Expect no message body, but observed it."
-              | None, None => Tau (tester' s1 others (k tt))
-              end
-            | inl err => catch $ "Unify field failed: " ++ err
-            end
-          else catch $ "Expect status " ++ status_to_string stx
-                    ++ " but observed " ++ status_to_string st
-      end k
-    | (||||le|) =>
+    | (|||le|) =>
       match le in logE Y return (Y -> _) -> _ with
       | Log str =>
         fun k => embed Log ("Observer: " ++ str);;
-              Tau (tester' s others (k tt))
+              Tau (backtrack' others (k tt))
       end k
-    | (|||||oe) =>
-      match oe in observeE Y return (Y -> _) -> _ with
-      | Observe__ToServer st =>
-        fun k => pkt <- embed Gen st s;;
+    | (||||te) =>
+      match te in testerE Y return (Y -> _) -> _ with
+      | Tester__Send st es =>
+        fun k => pkt <- embed Gen st es;;
               embed Client__Send pkt;;
-              Tau (tester' s (match_observe (Observe__ToServer st) pkt others) (k pkt))
-      | Observe__ToClient =>
+              Tau (backtrack' (match_observe (Tester__Send st es) pkt others)
+                              (k pkt))
+      | Tester__Recv =>
         fun k => opkt <- trigger Client__Recv;;
               match opkt with
               | Some pkt =>
-                Tau (tester' s (match_observe Observe__ToClient pkt others) (k pkt))
+                Tau (backtrack' (match_observe Tester__Recv pkt others) (k pkt))
               | None =>
                 match others with
-                | []              => Tau (tester' s [] m)
-                | other :: others' => Tau (tester' s (others' ++ [m]) other)
+                | []              => Tau (backtrack' [] m)
+                | other :: others' => Tau (backtrack' (others' ++ [m]) other)
                 end
               end
       end k
     end
   end.
 
-Definition tester {E R} `{Is__tE E} : itree oE R -> itree E R :=
-  tester' (0, [], []) [].
+Definition backtrack {E R} `{Is__tE E} : itree stE R -> itree E R :=
+  backtrack' [].
+
+Fail Timeout 1 Definition tester {E R} `{Is__tE E} (mo : itree oE R) : itree E R :=
+  backtrack $ snd <$> unifier mo [].

@@ -27,6 +27,7 @@ Variant decideE : Type -> Set :=
 Variant unifyE : Type -> Type :=
   Unify__FreshBody : unifyE (exp message_body)
 | Unify__FreshETag : unifyE (exp field_value)
+| Unify__Match     : exp bool -> bool -> unifyE unit
 | Unify__Response  : http_response exp -> http_response id -> unifyE unit.
 
 Notation failureE := (exceptE string).
@@ -67,5 +68,8 @@ Definition observer {E R} `{Is__oE E} (m : itree nE R) : itree E R :=
          match se in symE _ R return _ R with
          | Sym__NewBody => trigger Unify__FreshBody
          | Sym__NewETag => trigger Unify__FreshETag
+         | Sym__Decide x => b <- trigger Decide;;
+                         embed Unify__Match x b;;
+                         ret b
          end
        end) m.

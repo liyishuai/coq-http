@@ -7,8 +7,7 @@ From ITree Require Export
      Nondeterminism
      ITree.
 From HTTP Require Export
-     Message
-     Common.
+     Parser.
 Export
   FunNotation
   FunctorNotation
@@ -21,11 +20,12 @@ Open Scope program_scope.
 Definition status_line_of_code (c : status_code) : status_line :=
   Status (Version 1 1) c (snd <$> find (N.eqb c ∘ fst) statusCodes).
 
-Record resource_state exp_ :=
+Record resource_state {exp_} :=
   ResourceState {
       resource__body : exp_ message_body;
       resource__etag : option (exp_ field_value)
     }.
+Arguments resource_state : clear implicits.
 Arguments ResourceState {_}.
 
 Definition server_state exp_ := list (path * option (resource_state exp_)).
@@ -64,9 +64,10 @@ Arguments appE : clear implicits.
 Variant logE : Type -> Set :=
   Log : string -> logE unit.
 
-Variant symE {exp_} : Type -> Set :=
+Variant symE {exp_} : Type -> Type :=
   Sym__NewBody : symE (exp_ message_body)
-| Sym__NewETag : symE (exp_ field_value).
+| Sym__NewETag : symE (exp_ field_value)
+| Sym__Decide  : exp_ bool -> symE bool.
 Arguments symE : clear implicits.
 
 Class Is__smE E `{appE exp -< E} `{nondetE -< E} `{logE -< E} `{symE exp -< E}.
@@ -122,10 +123,12 @@ Definition not_found : itree E unit :=
      (mx <- embed (@Sym__NewBody exp);;
       send_code 404 [] (Some mx)).
 
+Definition precondition_failed : itree E unit := send_code 412 [] None.
+
 Section LoopBody.
 
 Context (st : server_state exp) (methd : request_method) (t : request_target)
-   (om : option message_body).
+   (hs : list (field_line id)) (om : option message_body).
 
 Section TargetAbsolute.
 
@@ -149,7 +152,9 @@ Definition http_smi_get_body : itree E (server_state exp) :=
   end.
 
 (* PUT or POST *)
-Definition http_smi_put_body : itree E (server_state exp) :=
+Definition http_smi_put_body
+  : Monads.stateT (server_state exp) (itree E) unit :=
+  fun st =>
   match om with
   | Some m =>
     (* embed Log ("State before PUT: " ++ to_string st);; *)
@@ -159,11 +164,61 @@ Definition http_smi_put_body : itree E (server_state exp) :=
     | Some None     => created
     | None          => or created no_content
     end;;
-    ret (update p (Some (ResourceState (Exp__Const m) ot)) st)
-  | None => bad_request;; ret st
+    ret (update p (Some (ResourceState (Exp__Const m) ot)) st, tt)
+  | None => bad_request;; ret (st, tt)
   end.
 
 End TargetAbsolute.
+
+Definition getResource (p : path)
+  : Monads.stateT (server_state exp) (itree E) (option (resource_state exp)) :=
+  fun st =>
+    match get p st with
+    | Some r => ret (st, r)
+    | None =>
+      r <- or (ret None)
+             (Some <$>
+                   liftA2 ResourceState (embed (@Sym__NewBody exp))
+                   (or (ret None)
+                       (Some <$> embed (@Sym__NewETag exp))));;
+      ret (update p r st, r)
+    end.
+
+(** https://httpwg.org/http-core/draft-ietf-httpbis-semantics-latest.html#rfc.section.12.1.1 *)
+Definition if_match (p : path) (m : Monads.stateT (server_state exp) (itree E) unit) :
+  itree E (server_state exp) :=
+  match findField "If-Match" hs with
+  | Some v =>
+    if v =? "*"
+    then
+      '(st', r) <- getResource p st;;
+      match resource__etag <$> r with
+      | Some (Some _) => fst <$> m st'
+      | Some  None    => precondition_failed;; ret st'
+      | None          => not_found;; ret st'
+      end
+    else
+      match parse (parseCSV parseEntityTag) v with
+      | inl _ => bad_request;; ret st
+      | inr (ts, _) =>
+        '(st', r) <- getResource p st;;
+        match resource__etag <$> r with
+        | Some (Some tx) =>
+          b <- fold_left
+                (fun mb t =>
+                   b <- mb;;
+                   if b : bool
+                   then ret true
+                   else embed (@Sym__Decide exp) (Exp__Match t tx)) ts (ret false);;
+          if b
+          then fst <$> m st'
+          else precondition_failed;; ret st'
+        | Some None => precondition_failed;; ret st'
+        | None      => not_found;; ret st'
+        end
+      end
+  | None => fst <$> m st
+  end.
 
 Definition http_smi_body : itree E (server_state exp) :=
   match t with
@@ -172,7 +227,7 @@ Definition http_smi_body : itree E (server_state exp) :=
     match methd with
     | Method__GET => http_smi_get_body p
     | Method__PUT
-    | Method__POST => http_smi_put_body p
+    | Method__POST => if_match p (http_smi_put_body p)
     | _ =>
       send_code 405 [] None;; ret st
     end
@@ -185,6 +240,6 @@ End AfterConn.
 Definition http_smi : itree E void :=
   iter_forever (fun st : server_state exp =>
     '(c, Request (RequestLine methd t _) hs om) <- embed App__Recv st;;
-    http_smi_body c st methd t om) [].
+    http_smi_body c st methd t hs om) [].
 
 End HTTP_SMI.
