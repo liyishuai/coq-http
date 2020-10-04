@@ -36,3 +36,4 @@ Makefile.coq*
 *~
 *.ml*
 _build
+*.log

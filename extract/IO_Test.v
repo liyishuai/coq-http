@@ -22,7 +22,7 @@ Fixpoint multi_test' (fuel : nat) (test : IO bool) : IO bool :=
   match fuel with
   | O => ret true
   | S fuel =>
-    upon_success (prerr_endline (to_string fuel);;
+    upon_success (print_endline (to_string fuel);;
                   multi_test' fuel test) test
   end.
 

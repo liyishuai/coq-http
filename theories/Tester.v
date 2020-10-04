@@ -20,16 +20,15 @@ Instance Serialize__packetT : Serialize (packetT id) :=
     [Atom "Dst"; to_sexp d];
     [Atom "Msg"; to_sexp p]]%sexp.
 
-Definition exp_state : Set := list (var * option message_body) *
+Definition exp_state : Set := N * list (var * option message_body) *
                               list (var * (field_value + list field_value)).
 
 Definition fresh_var {T} (vs : list (var * T)) : var :=
   1 + fold_left N.max (map fst vs) 0.
 
-Definition fresh_body (s : exp_state) : exp_state * var :=
-  let (bs, es) := s in
-  let x := fresh_var bs in
-  ((x, None) :: bs, es, x).
+Definition fresh_body (s : exp_state) : exp_state :=
+  let '(n, bs, es) := s in
+  (1 + n, bs, es).
 
 Definition fresh_etag (s : exp_state) : exp_state * var :=
   let (bs, es) := s in
@@ -38,22 +37,22 @@ Definition fresh_etag (s : exp_state) : exp_state * var :=
 
 Definition assert (x : var) (v : field_value) (s : exp_state)
   : option exp_state :=
-  let (bs, es) := s in
+  let '(n, bs, es) := s in
   match get x es with
   | Some (inl e)  => if e =? v then Some s else None
   | Some (inr ts) => if existsb (String.eqb v) ts
                     then None
-                    else Some (bs, put x (inl v) es)
-  | None => Some (bs, put x (inl v) es)
+                    else Some (n, bs, put x (inl v) es)
+  | None => Some (n, bs, put x (inl v) es)
   end.
 
 Definition assert_not (x : var) (v : field_value) (s : exp_state)
   : option exp_state :=
-  let (bs, es) := s in
+  let '(n, bs, es) := s in
   match get x es with
   | Some (inl e) => if e =? v then None else Some s
-  | Some (inr ts) => Some (bs, put x (inr (v :: ts)) es)
-  | None          => Some (bs, put x (inr [v]) es)
+  | Some (inr ts) => Some (n, bs, put x (inr (v :: ts)) es)
+  | None          => Some (n, bs, put x (inr [v]) es)
   end.
 
 Definition unify {T} (e : exp T) (v : T) (s : exp_state) : option exp_state :=
@@ -61,11 +60,11 @@ Definition unify {T} (e : exp T) (v : T) (s : exp_state) : option exp_state :=
   | Exp__Const m => fun v s => if m =? v then Some s else None
   | Exp__Body x =>
     fun v s =>
-      let (bs, es) := s in
+      let '(n, bs, es) := s in
       match get x bs with
       | Some (Some b) => if b =? v then Some s else None
       | Some None     => None
-      | None          => Some (put x (Some v) bs, es)
+      | None          => Some (n, put x (Some v) bs, es)
       end
   | Exp__ETag x => assert x
   | Exp__Match f (Exp__ETag x) =>
@@ -80,9 +79,6 @@ Variant clientE : Type -> Type :=
 | Client__Recv : clientE (option (packetT id))
 | Client__Send : packetT id -> clientE unit.
 
-Variant logE : Type -> Set :=
-  Log : string -> logE unit.
-
 Class Is__tE E `{failureE -< E} `{nondetE -< E}
       `{genE -< E} `{logE -< E} `{clientE -< E}.
 Notation tE := (failureE +' nondetE +' genE +' logE +' clientE).
@@ -95,7 +91,7 @@ CoFixpoint match_event {T R} (e0 : observeE R) (r : R) (m : itree oE T)
   | TauF m' => Tau (match_event e0 r m')
   | VisF e k =>
     match e with
-    | (||||oe) =>
+    | (|||||oe) =>
       match oe in observeE Y, e0 in observeE R return (Y -> _) -> R -> _ with
       | Observe__ToServer _, Observe__ToServer _
       | Observe__ToClient, Observe__ToClient => id
@@ -134,8 +130,8 @@ CoFixpoint tester' {E R} `{Is__tE E} (s : exp_state) (others : list (itree oE R)
       end k
     | (|||ue|) =>
       match ue in unifyE Y return (Y -> _) -> _ with
-      | Unify__FreshBody => fun k => let (s', x) := fresh_body s in
-                               Tau (tester' s' others (k (Exp__Body x)))
+      | Unify__FreshBody => fun k => let '(x, bs, fs) := fresh_body s in
+                               Tau (tester' (x, bs, fs) others (k (Exp__Body x)))
       | Unify__FreshETag => fun k => let (s', x) := fresh_etag s in
                                Tau (tester' s' others (k (Exp__ETag x)))
       | Unify__Response rx r =>
@@ -162,7 +158,9 @@ CoFixpoint tester' {E R} `{Is__tE E} (s : exp_state) (others : list (itree oE R)
               | Some bx, Some b =>
                 match unify bx b s1 with
                 | Some s2 => Tau (tester' s2 others (k tt))
-                | None    => catch "Message body unsatisfying."
+                | None    => catch $ "Expect message: " ++ to_string bx
+                                  ++ ", but observed: " ++ b
+                                  ++ ", under state: " ++ to_string s1
                 end
               | Some _, None => catch "Expect message body, but not found."
               | None, Some _ => catch "Expect no message body, but observed it."
@@ -173,7 +171,13 @@ CoFixpoint tester' {E R} `{Is__tE E} (s : exp_state) (others : list (itree oE R)
           else catch $ "Expect status " ++ status_to_string stx
                     ++ " but observed " ++ status_to_string st
       end k
-    | (||||oe) =>
+    | (||||le|) =>
+      match le in logE Y return (Y -> _) -> _ with
+      | Log str =>
+        fun k => embed Log ("Observer: " ++ str);;
+              Tau (tester' s others (k tt))
+      end k
+    | (|||||oe) =>
       match oe in observeE Y return (Y -> _) -> _ with
       | Observe__ToServer st =>
         fun k => pkt <- embed Gen st s;;
@@ -195,4 +199,4 @@ CoFixpoint tester' {E R} `{Is__tE E} (s : exp_state) (others : list (itree oE R)
   end.
 
 Definition tester {E R} `{Is__tE E} : itree oE R -> itree E R :=
-  tester' ([], []) [].
+  tester' (0, [], []) [].

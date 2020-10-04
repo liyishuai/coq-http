@@ -32,8 +32,8 @@ Variant unifyE : Type -> Type :=
 Notation failureE := (exceptE string).
 
 Class Is__oE E `{failureE -< E} `{nondetE -< E}
-      `{decideE -< E} `{unifyE -< E} `{observeE -< E}.
-Notation oE := (failureE +' nondetE +' decideE +' unifyE +' observeE).
+      `{decideE -< E} `{unifyE -< E} `{logE -< E} `{observeE -< E}.
+Notation oE := (failureE +' nondetE +' decideE +' unifyE +' logE +' observeE).
 Instance oE_Is__oE : Is__oE oE. Defined.
 
 Definition dualize {E R} `{Is__oE E} (e : netE R) : itree E R :=
@@ -59,7 +59,11 @@ Definition observer {E R} `{Is__oE E} (m : itree nE R) : itree E R :=
          match ne in nondetE R return _ R with
          | Or => trigger Decide
          end
-       | (||se) =>
+       | (||le|) =>
+         match le in logE R return _ R with
+         | Log str => embed Log ("SMI: " ++ str)%string
+         end
+       | (|||se) =>
          match se in symE _ R return _ R with
          | Sym__NewBody => trigger Unify__FreshBody
          | Sym__NewETag => trigger Unify__FreshETag

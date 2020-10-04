@@ -23,12 +23,15 @@ stop:
 		then docker rm -f apache; \
 	fi
 
-APACHE?=ysli/apache
+SERVER?=ysli/apache
 
-apache: stop
+server: stop
 	if [ $$(which docker) ]; \
-		then docker pull $(APACHE); \
-		     docker run -d --name $@ -p $(PORT):80 $(APACHE); \
+		then docker pull $(SERVER); \
+		     docker run -d --name $@ -p $(PORT):80 $(SERVER); \
 		else echo Docker not found; \
 		     exit 1; \
 	fi
+
+test: all server
+	./TestHttp.native 2> tester.log

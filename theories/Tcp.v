@@ -62,8 +62,8 @@ Variant netE : Type -> Type :=
   Net__In  : server_state exp -> netE (packetT exp)
 | Net__Out : packetT exp -> netE unit.
 
-Class Is__nE E `{netE -< E} `{nondetE -< E} `{symE exp -< E}.
-Notation nE := (netE +' nondetE +' symE exp).
+Class Is__nE E `{netE -< E} `{nondetE -< E} `{logE -< E} `{symE exp -< E}.
+Notation nE := (netE +' nondetE +' logE +' symE exp).
 Instance nE_Is__nE : Is__nE nE. Defined.
 
 Definition conn_is_app : connT -> bool := Nat.eqb 0.
@@ -130,7 +130,14 @@ CoFixpoint compose' {E R} `{Is__nE E}
           b <- trigger Or;;
           Tau (compose' bfi bfo net (k b))
       end ka
-    | (||se) =>
+    | (||le|) =>
+      match le in logE Y return (Y -> _) -> _ with
+      | Log str =>
+        fun k =>
+          embed Log ("App: " ++ str)%string;;
+          Tau (compose' bfi bfo net (k tt))
+      end ka
+    | (|||se) =>
       match se in symE _ Y return (Y -> _) -> _ with
       | Sym__New =>
         fun k =>

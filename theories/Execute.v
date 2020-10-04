@@ -13,7 +13,7 @@ Fixpoint findResponse (s : conn_state)
     let '(c, (f, str)) := cfs in
     match parse parseResponse str with
     | inl (Some err) =>
-      failwith $ "Bad response " ++ str ++ " received on connection "
+      failwith $ "Bad response " ++ to_string str ++ " received on connection "
                ++ to_string c ++ ", error message: " ++ err
     | inl None => '(op, t') <- findResponse t;;
                  ret (op, cfs :: t')
