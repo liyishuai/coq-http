@@ -103,7 +103,9 @@ Definition random_request (s : server_state exp) (es : exp_state)
     str0 <- gen_string;;
     let str1 : string := p ++ ": " ++ str0 in
     tag_field <- io_or (t <- gen_etag p s es;;
-                       ret [@Field id "If-Match" (t : field_value)])
+                       io_or
+                         (ret [@Field id "If-Match" (t : field_value)])
+                         (ret [@Field id "If-None-Match" (t : field_value)]))
                       (ret []);;
     ret (Request
            l (tag_field
@@ -116,9 +118,10 @@ Definition random_request (s : server_state exp) (es : exp_state)
 Definition gen_request' (p : path) (s : server_state exp)
            (es : exp_state) : IO http_request :=
   match get p s with
-  | Some _ =>
+  | Some (Some _) =>
     str0 <- gen_string;;
     t <- gen_etag p s es;;
+    io_or (
     let l : request_line :=
         RequestLine Method__PUT (RequestTarget__Origin p None) (Version 1 1) in
     let str1 : string := p ++ ": " ++ str0 in
@@ -127,6 +130,12 @@ Definition gen_request' (p : path) (s : server_state exp)
              Field "Content-Length" (to_string $ String.length str1);
              Field "If-Match" (t : field_value)]
            (Some str1) : http_request)
+      ) (let l : request_line :=
+             RequestLine Method__GET (RequestTarget__Origin p None) (Version 1 1) in
+         ret (Request
+                l [Field "Host" "localhost:8000";
+                  Field "If-None-Match" (t : field_value)] None : http_request))
+  | Some None
   | None =>
     io_or (let l : request_line :=
                RequestLine Method__PUT (RequestTarget__Origin p None) (Version 1 1) in

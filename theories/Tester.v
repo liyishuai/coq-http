@@ -41,28 +41,30 @@ Definition fresh_etag (s : exp_state) : exp_state * var :=
 
 (** https://httpwg.org/http-core/draft-ietf-httpbis-semantics-latest.html#rfc.section.7.9.3.2 *)
 
-Definition etag_eqb (x y : field_value) : bool :=
+Definition etag_match (weak : bool) (x y : field_value) : bool :=
   match x, y with
-  | String "W" (String "/" _), _
-  | _, String "W" (String "/" _) => false
+  | String "W" (String "/" s1), String "W" (String "/" s2)
+  | String """" _ as s1       , String "W" (String "/" s2)
+  | String "W" (String "/" s1), String """" _ as s2 =>
+    weak &&& (s1 =? s2)
   | _, _ => x =? y
   end.
 
-Definition assert (x : var) (v : field_value) (s : exp_state)
+Definition assert (w : bool) (x : var) (v : field_value)(s : exp_state)
   : string + exp_state :=
   let '(n, bs, es) := s in
   let fx  := get x es in
   let err := inl $ "Expect " ++ to_string fx
                  ++ ", but observed " ++ to_string v in
   match fx with
-  | Some (inl e)  => if etag_eqb e v then inr s else err
+  | Some (inl e)  => if etag_match w e v then inr s else err
   | Some (inr ts) => if existsb (String.eqb v) ts
                     then err
                     else inr (n, bs, put x (inl v) es)
   | None => inr (n, bs, put x (inl v) es)
   end.
 
-Definition assert_not (x : var) (v : field_value) (s : exp_state)
+Definition assert_not (w : bool) (x : var) (v : field_value) (s : exp_state)
   : string + exp_state :=
   let '(n, bs, es) := s in
   let '(n, bs, es) := s in
@@ -70,7 +72,7 @@ Definition assert_not (x : var) (v : field_value) (s : exp_state)
   let err := inl $ "Expect not " ++ to_string fx
                  ++ ", but observed " ++ to_string v in
   match fx with
-  | Some (inl e) => if etag_eqb e v then err else inr s
+  | Some (inl e) => if etag_match w e v then err else inr s
   | Some (inr ts) => inr (n, bs, put x (inr (v :: ts)) es)
   | None          => inr (n, bs, put x (inr [v]) es)
   end.
@@ -88,10 +90,10 @@ Definition unify {T} (e : exp T) (v : T) (s : exp_state) : string + exp_state :=
       | Some None     => err v
       | None          => inr (n, put x (Some v) bs, es)
       end
-  | Exp__ETag x => assert x
-  | Exp__Match f (Exp__ETag x) =>
-    fun v => if v then assert x f else assert_not x f
-  | Exp__Match _ _ => fun v _ => err v
+  | Exp__ETag x => assert false x
+  | Exp__Match f (Exp__ETag x) w =>
+    fun v => if v then assert w x f else assert_not w x f
+  | Exp__Match _ _ _ => fun v _ => err v
   end v s.
 
 Variant testerE : Type -> Type :=
