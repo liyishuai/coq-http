@@ -5,6 +5,9 @@ all: $(COQMAKEFILE)
 	@+$(MAKE) -f $^ $@
 	$(MAKE) -C extract
 
+test: all
+	$(MAKE) -C $@
+
 install: $(COQMAKEFILE)
 	@+$(MAKE) -f $^ $@
 	install extract/$(EXE) `opam var bin`
@@ -25,4 +28,4 @@ force _CoqProject Makefile: ;
 %: $(COQMAKEFILE) force
 	@+$(MAKE) -f $< $@
 
-.PHONY: all clean force
+.PHONY: all clean force test
