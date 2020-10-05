@@ -40,7 +40,14 @@ Definition fresh_etag (s : exp_state) : exp_state * var :=
   (bs, (x, inr []) :: es, x).
 
 (** https://httpwg.org/http-core/draft-ietf-httpbis-semantics-latest.html#rfc.section.7.9.3.2 *)
-(* TODO: Strong vs weak comparison. *)
+
+Definition etag_eqb (x y : field_value) : bool :=
+  match x, y with
+  | String "W" (String "/" _), _
+  | _, String "W" (String "/" _) => false
+  | _, _ => x =? y
+  end.
+
 Definition assert (x : var) (v : field_value) (s : exp_state)
   : string + exp_state :=
   let '(n, bs, es) := s in
@@ -48,7 +55,7 @@ Definition assert (x : var) (v : field_value) (s : exp_state)
   let err := inl $ "Expect " ++ to_string fx
                  ++ ", but observed " ++ to_string v in
   match fx with
-  | Some (inl e)  => if e =? v then inr s else err
+  | Some (inl e)  => if etag_eqb e v then inr s else err
   | Some (inr ts) => if existsb (String.eqb v) ts
                     then err
                     else inr (n, bs, put x (inl v) es)
@@ -63,7 +70,7 @@ Definition assert_not (x : var) (v : field_value) (s : exp_state)
   let err := inl $ "Expect not " ++ to_string fx
                  ++ ", but observed " ++ to_string v in
   match fx with
-  | Some (inl e) => if e =? v then err else inr s
+  | Some (inl e) => if etag_eqb e v then err else inr s
   | Some (inr ts) => inr (n, bs, put x (inr (v :: ts)) es)
   | None          => inr (n, bs, put x (inr [v]) es)
   end.
@@ -140,7 +147,9 @@ Definition instantiate_unify {E A} `{Is__stE E} (e : unifyE A)
         end
       else throw $ "Expect status " ++ status_to_string stx
                  ++ " but observed " ++ status_to_string st
+                 ++ ", under state " ++ to_string s
     | Unify__Match bx b =>
+      (* embed Log ("Unifying " ++ to_string bx ++ " against " ++ to_string b);; *)
       match unify bx b s with
       | inr s1  => Ret (s1, tt)
       | inl err => throw $ "Unify If-Match failed: " ++ err
@@ -159,7 +168,7 @@ Definition liftState {S A} {F : Type -> Type} `{Functor F} (aF : F A)
   : Monads.stateT S F A :=
   fun s : S => pair s <$> aF.
 
-Definition unifier {E R} `{decideE -< E} `{Is__stE E} (m : itree oE R)
+Definition unifier {E R} `{Is__stE E} (m : itree oE R)
   : Monads.stateT exp_state (itree E) R :=
   interp (fun _ e =>
             match e with
@@ -170,7 +179,6 @@ Definition unifier {E R} `{decideE -< E} `{Is__stE E} (m : itree oE R)
             | (||e|)
             | (||||e|) => @liftState exp_state _ (itree _) _ (trigger e)
             end) m.
-Fail Timeout 1 Check unifier.
 
 CoFixpoint match_event {T R} (e0 : testerE R) (r : R) (m : itree stE T)
   : itree stE T :=
@@ -259,5 +267,5 @@ CoFixpoint backtrack' {E R} `{Is__tE E} (others : list (itree stE R))
 Definition backtrack {E R} `{Is__tE E} : itree stE R -> itree E R :=
   backtrack' [].
 
-Fail Timeout 1 Definition tester {E R} `{Is__tE E} (mo : itree oE R) : itree E R :=
-  backtrack $ snd <$> unifier mo [].
+Definition tester {E R} `{Is__tE E} (mo : itree oE R) :=
+  backtrack $ snd <$> unifier mo (0, [], []).

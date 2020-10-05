@@ -88,7 +88,7 @@ Context (c : connT).
 
 Definition send_code (sc : status_code) (fs : list (field_line exp))
                      (b : option (exp message_body)) : itree E unit :=
-  trigger (App__Send c (Response (status_line_of_code sc) [] b)).
+  trigger (App__Send c (Response (status_line_of_code sc) fs b)).
 
 
 Definition ok (ot : option (exp field_value)) (m : exp message_body) :=
@@ -100,22 +100,16 @@ Definition ok (ot : option (exp field_value)) (m : exp message_body) :=
       send_code 200 [Field "ETag" t] (Some m);;
       ret (Some t)).
 
-Definition created' (mx : option (exp message_body)) : itree E (option (exp field_value)) :=
-(* or (t <- watvalue <$> embed (@Sym__NewETag exp);; *)
-(*     send_code 201 [Field "ETag" t] None;; *)
-(*     ret (Some t)) *)
-  (send_code 201 [] None;; ret None).
+Definition created' (mx : option (exp message_body)) : itree E unit :=
+  send_code 201 [] mx.
 
-Definition created : itree E (option (exp field_value)) :=
-(* or (created' None) *)
-  (mx <- embed (@Sym__NewBody exp);;
-   created' (Some mx)).
+Definition created : itree E unit :=
+  or (created' None)
+     (mx <- embed (@Sym__NewBody exp);;
+      created' (Some mx)).
 
-Definition no_content : itree E (option (exp field_value)) :=
-  or (send_code 204 [] None;; ret None)
-     (t <- trigger (@Sym__NewETag exp);;
-      send_code 204 [Field "ETag" t] None;;
-      ret (Some t)).
+Definition no_content : itree E unit :=
+  send_code 204 [] None.
 
 Definition bad_request : itree E unit := send_code 400 [] None.
 Definition not_found : itree E unit :=
@@ -123,7 +117,10 @@ Definition not_found : itree E unit :=
      (mx <- embed (@Sym__NewBody exp);;
       send_code 404 [] (Some mx)).
 
-Definition precondition_failed : itree E unit := send_code 412 [] None.
+Definition precondition_failed : itree E unit :=
+  or (send_code 412 [] None)
+     (mx <- embed (@Sym__NewBody exp);;
+      send_code 412 [] (Some mx)).
 
 Section LoopBody.
 
@@ -157,13 +154,12 @@ Definition http_smi_put_body
   fun st =>
   match om with
   | Some m =>
-    (* embed Log ("State before PUT: " ++ to_string st);; *)
-    ot <-
     match get p st with
     | Some (Some _) => no_content
     | Some None     => created
     | None          => or created no_content
     end;;
+    ot <- or (Some <$> embed (@Sym__NewETag exp)) (ret None);;
     ret (update p (Some (ResourceState (Exp__Const m) ot)) st, tt)
   | None => bad_request;; ret (st, tt)
   end.
@@ -202,6 +198,9 @@ Definition if_match (p : path) (m : Monads.stateT (server_state exp) (itree E) u
       | inl _ => bad_request;; ret st
       | inr (ts, _) =>
         '(st', r) <- getResource p st;;
+        (* embed Log ("Evaluating If-Match " *)
+        (*              ++ to_string ts ++ " against state " *)
+        (*              ++ to_string st')%string;; *)
         match resource__etag <$> r with
         | Some (Some tx) =>
           b <- fold_left

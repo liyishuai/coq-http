@@ -44,7 +44,7 @@ Definition io_or {A} (x y : IO A) : IO A :=
   if b : bool then x else y.
 
 Definition gen_string' : IO string :=
-  io_choose "" ["Hello"; "World"; "Foo"; "Bar"].
+  io_choose "" ["Hello"; "World"].
 
 Fixpoint dup {A} (n : nat) (a : A) : list A :=
   match n with
@@ -62,7 +62,37 @@ Definition gen_path (s : server_state exp) : IO path :=
   p <- gen_string;;
   io_choose p (p::paths).
 
-Definition gen_request (s : server_state exp) : IO http_request :=
+Definition gen_etag (p : path) (s : server_state exp) (es : exp_state)
+  : IO field_value :=
+  let tags : list field_value :=
+      concat (map (fun st =>
+                     match snd st with
+                     | inl t => [t]
+                     | inr n => n
+                     end) (snd es)) in
+  (* prerr_endline ("Generating ETag for " *)
+  (*                  ++ to_string p ++ " under state " *)
+  (*                  ++ to_string (s, es));; *)
+  let random_tag := io_choose """12-5b0dffb40b3bb""" tags in
+  match get p s with
+  | None
+  | Some None
+  | Some (Some (ResourceState _ None)) => random_tag
+  | Some (Some (ResourceState _ (Some tx))) =>
+    match tx with
+    | Exp__Const t => io_or (ret t) (io_choose t tags)
+    | Exp__ETag  x =>
+      match get x (snd es) with
+      | Some (inl t)  => ret t
+      | Some (inr ts) => io_choose """a-5b0dffb40d6e3""" ts
+      | None => random_tag
+      end
+    | _ => random_tag
+    end
+  end.
+
+Definition gen_request (s : server_state exp) (es : exp_state)
+  : IO http_request :=
   m <- io_or (ret Method__GET) (ret Method__PUT);;
   p <- gen_path s;;
   let l : request_line :=
@@ -71,9 +101,13 @@ Definition gen_request (s : server_state exp) : IO http_request :=
   | Method__PUT =>
     str0 <- gen_string;;
     let str1 : string := p ++ ": " ++ str0 in
-    ret (Request l [Field "Host" "localhost:8000";
-                   Field "Content-Length" (to_string $ String.length str1)]
-                 (Some str1))
+    tag_field <- io_or (t <- gen_etag p s es;; ret [@Field id "If-Match" (t : field_value)])
+                      (ret []);;
+    ret (Request
+           l (tag_field
+                ++ [Field "Host" "localhost:8000";
+                   Field "Content-Length" (to_string $ String.length str1)])
+           (Some str1))
   | _ => ret $ Request l [Field "Host" "localhost:8000"] None
   end.
 
@@ -97,10 +131,10 @@ Fixpoint execute' {R} (fuel : nat) (s : conn_state) (m : itree tE R)
         end k
       | (||ge|) =>
         match ge in genE Y return (Y -> _) -> _ with
-        | Gen ss _ =>
+        | Gen ss es =>
           fun k =>
             c <- io_choose 1%nat (map fst s);;
-            p <- Packet c 0 ∘ inl <$> gen_request ss;;
+            p <- Packet c 0 ∘ inl <$> gen_request ss es;;
             execute' fuel s (k p)
         end k
       | (|||le|) =>
@@ -120,5 +154,5 @@ Definition execute {R} (m : itree tE R) : IO bool :=
   fold_left (fun m fd => OUnix.close fd;; m) (map (fst ∘ snd) s) (ret tt);;
   ret b.
 
-Fail Definition test {R} : itree smE R -> IO bool :=
+Definition test {R} : itree smE R -> IO bool :=
   execute ∘ tester ∘ observer ∘ compose_switch tcp.
