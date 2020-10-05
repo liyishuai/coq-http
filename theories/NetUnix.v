@@ -106,7 +106,8 @@ Definition send_request (pkt : packetT id) : stateT conn_state IO unit :=
                if o + sent =? len
                then ret tt
                else send_rec (o + sent))%int int_zero;;
-        prerr_endline ("sent: " ++ str)
+        prerr_endline ("================SENT================"
+                         ++ to_string c ++ CRLF ++ str)
       | inr _ => failwith "Unexpected send response"
       end in
   mkStateT

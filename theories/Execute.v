@@ -18,7 +18,8 @@ Fixpoint findResponse (s : conn_state)
     | inl None => '(op, t') <- findResponse t;;
                  ret (op, cfs :: t')
     | inr (r, str') =>
-      prerr_endline ("recv: " ++ response_to_string r);;
+      prerr_endline ("==============RECEIVED=============="
+                       ++ to_string c ++ CRLF ++ response_to_string r);;
       ret (Some (Packet 0 c (inr r)), (c, (f, str')) :: t)
     end
   end.

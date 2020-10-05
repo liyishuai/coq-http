@@ -13,7 +13,6 @@ clean: $(COQMAKEFILE)
 	@ocamlbuild -clean
 
 %.native:
-	$(MAKE) -C ..
 	$(MAKE) $(COQMAKEFILE)
 	$(MAKE) -f $(COQMAKEFILE) $*.vo
 	ocamlbuild -lib unix $@
@@ -34,5 +33,5 @@ server: stop
 		     exit 1; \
 	fi
 
-test: all server
+test: server
 	./TestHttp.native 2> client.log

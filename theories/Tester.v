@@ -222,7 +222,7 @@ CoFixpoint backtrack' {E R} `{Is__tE E} (others : list (itree stE R))
         match others with
         | [] => throw err
         | other :: others' =>
-          embed Log ("Retry upon " ++ err);;
+          (* embed Log ("Retry upon " ++ err);; *)
           Tau (backtrack' others' other)
         end in
     match e with
