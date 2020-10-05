@@ -35,3 +35,14 @@ server: stop
 
 test: server
 	./TestHttp.native 2> client.log
+
+etag-test:
+	curl -X PUT -d Fine localhost:8000/wat
+	curl -v localhost:8000/wat
+	curl -v -X PUT -H 'If-Match: "WAT"' -d 'Wat' localhost:8000/wat
+	curl localhost:8000/wat
+	curl -v -X DELETE -H 'If-Match: "WAT"' localhost:8000/wat 
+	curl localhost:8000/wat
+	curl -v -X DELETE localhost:8000/wat 
+	curl -v -X PUT -H 'If-Match: "WAT"' -d 'NewWat' localhost:8000/wat
+	curl localhost:8000/wat

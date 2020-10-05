@@ -22,6 +22,9 @@ license:
   - fullname: GNU Affero General Public License v3.0 or later
     identifier: AGPL-3.0-or-later
 dependencies:
+  - description: '[OCamlbuild](https://github.com/ocaml/ocamlbuild)'
+    opam:
+      name: ocamlbuild
   - description: '[ITreeIO](https://github.com/Lysxia/coq-itree-io)'
     opam:
       name: coq-itree-io

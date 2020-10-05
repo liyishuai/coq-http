@@ -47,16 +47,14 @@ Definition io_or {A} (x y : IO A) : IO A :=
 Definition gen_string' : IO string :=
   io_choose "" ["Hello"; "World"; "Foo"; "Bar"].
 
-Fixpoint dup {A} (n : nat) (a : A) : list A :=
+Fixpoint gen_many {A} (n : nat) (ma : IO A) : IO (list A) :=
   match n with
-  | O => []
-  | S n' => a :: dup n' a
+  | O => ret []
+  | S n' => liftA2 cons ma $ io_or (ret []) (gen_many n' ma)
   end.
 
 Definition gen_string : IO string :=
-  n <- nat_of_int <$> ORandom.int 4;;
-  let gens : list (IO string) := dup (S n) gen_string' in
-  fold_left (liftA2 append) gens (ret "").
+  String.concat "" <$> gen_many 10 gen_string'.
 
 Definition gen_path (s : server_state exp) : IO path :=
   let paths : list path := map fst s in

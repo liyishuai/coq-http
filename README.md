@@ -21,6 +21,7 @@ HTTP specification in Coq, testable and verifiable
 - License: [GNU Affero General Public License v3.0 or later](LICENSE)
 - Compatible Coq versions: 8.12 or later
 - Additional dependencies:
+  - [OCamlbuild](https://github.com/ocaml/ocamlbuild)
   - [ITreeIO](https://github.com/Lysxia/coq-itree-io)
   - [Parsec](https://github.com/liyishuai/coq-parsec)
 - Coq namespace: `HTTP`
