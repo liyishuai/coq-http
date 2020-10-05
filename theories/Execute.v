@@ -44,7 +44,7 @@ Definition io_or {A} (x y : IO A) : IO A :=
   if b : bool then x else y.
 
 Definition gen_string' : IO string :=
-  io_choose "" ["Hello"; "World"].
+  io_choose "" ["Hello"; "World"; "Foo"; "Bar"].
 
 Fixpoint dup {A} (n : nat) (a : A) : list A :=
   match n with
@@ -53,7 +53,7 @@ Fixpoint dup {A} (n : nat) (a : A) : list A :=
   end.
 
 Definition gen_string : IO string :=
-  n <- nat_of_int <$> ORandom.int 2;;
+  n <- nat_of_int <$> ORandom.int 4;;
   let gens : list (IO string) := dup (S n) gen_string' in
   fold_left (liftA2 append) gens (ret "").
 
@@ -91,7 +91,7 @@ Definition gen_etag (p : path) (s : server_state exp) (es : exp_state)
     end
   end.
 
-Definition gen_request (s : server_state exp) (es : exp_state)
+Definition random_request (s : server_state exp) (es : exp_state)
   : IO http_request :=
   m <- io_or (ret Method__GET) (ret Method__PUT);;
   p <- gen_path s;;
@@ -101,7 +101,8 @@ Definition gen_request (s : server_state exp) (es : exp_state)
   | Method__PUT =>
     str0 <- gen_string;;
     let str1 : string := p ++ ": " ++ str0 in
-    tag_field <- io_or (t <- gen_etag p s es;; ret [@Field id "If-Match" (t : field_value)])
+    tag_field <- io_or (t <- gen_etag p s es;;
+                       ret [@Field id "If-Match" (t : field_value)])
                       (ret []);;
     ret (Request
            l (tag_field
@@ -110,6 +111,38 @@ Definition gen_request (s : server_state exp) (es : exp_state)
            (Some str1))
   | _ => ret $ Request l [Field "Host" "localhost:8000"] None
   end.
+
+Definition gen_request' (p : path) (s : server_state exp)
+           (es : exp_state) : IO http_request :=
+  match get p s with
+  | Some _ =>
+    str0 <- gen_string;;
+    t <- gen_etag p s es;;
+    let l : request_line :=
+        RequestLine Method__PUT (RequestTarget__Origin p None) (Version 1 1) in
+    let str1 : string := p ++ ": " ++ str0 in
+    ret (Request
+           l [Field "Host" "localhost:8000";
+             Field "Content-Length" (to_string $ String.length str1);
+             Field "If-Match" (t : field_value)]
+           (Some str1) : http_request)
+  | None =>
+    io_or (let l : request_line :=
+               RequestLine Method__PUT (RequestTarget__Origin p None) (Version 1 1) in
+           str0 <- gen_string;;
+           let str1 : string := p ++ ": " ++ str0 in
+           ret $ Request
+               l [Field "Host" "localhost:8000";
+                 Field "Content-Length" (to_string $ String.length str1)]
+               (Some str1))
+          (let l : request_line :=
+               RequestLine Method__GET (RequestTarget__Origin p None) (Version 1 1) in
+           ret (Request l [Field "Host" "localhost:8000"] None : http_request))
+  end.
+
+Definition gen_request (s : server_state exp) (es : exp_state) : IO http_request :=
+  p <- gen_path s;;
+  io_or (gen_request' p s es) (random_request s es).
 
 Fixpoint execute' {R} (fuel : nat) (s : conn_state) (m : itree tE R)
   : IO (bool * conn_state) :=
@@ -133,7 +166,7 @@ Fixpoint execute' {R} (fuel : nat) (s : conn_state) (m : itree tE R)
         match ge in genE Y return (Y -> _) -> _ with
         | Gen ss es =>
           fun k =>
-            c <- io_choose 1%nat (map fst s);;
+            c <- io_or (ret $ S $ length s) (io_choose 1%nat (map fst s));;
             p <- Packet c 0 ∘ inl <$> gen_request ss es;;
             execute' fuel s (k p)
         end k
