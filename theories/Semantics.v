@@ -271,20 +271,48 @@ Definition if_none_match (p : path)
     | None => accept st
     end.
 
-Definition http_smi_body : itree E (server_state exp) :=
+Definition target_uri : option absolute_uri :=
+  let mh : option authority :=
+      match findField "Host" hs with
+      | Some a =>
+        match parse parseAuthority a with
+        | inl _      => None
+        | inr (a, _) => Some a
+        end%string
+      | None   => Some $ Authority None "localhost" None
+      end in
   match t with
-  | RequestTarget__Origin p _
-  | RequestTarget__Absolute _ _ p _ =>
-    match methd with
-    | Method__GET =>
-      fst <$> (if_match p $ if_none_match p $ http_smi_get_body p) st
-    | Method__PUT
-    | Method__POST =>
-      fst <$> (if_match p $ if_none_match p $ http_smi_put_body p) st
-    | _ =>
-      send_code 405 [] None;; ret st
-    end
-  | _ => bad_request;; ret st
+  | RequestTarget__Absolute u =>
+    let 'URI s (Authority ou h op) p oq := u in
+    let h' := if h =? "localhost" then "127.0.0.1" else h in
+    let op' := Some $ match op with
+                      | Some p' => p'
+                      | None    => 80
+                      end in
+    ret $ URI s (Authority ou h' op') p oq
+  | RequestTarget__Authority a => ret $ URI Scheme__HTTP a "" None
+  | RequestTarget__Origin  p q => h <- mh;; ret (URI Scheme__HTTP h p q)
+  | RequestTarget__Asterisk    => h <- mh;; ret (URI Scheme__HTTP h "" None)
+  end.
+
+Definition http_smi_body : itree E (server_state exp) :=
+  match target_uri with
+  | Some u =>
+    let 'URI s (Authority ou h op) p oq := u in
+    if (h =? "127.0.0.1") &&& (op = Some 80?)
+    then
+      match methd with
+      | Method__GET =>
+        fst <$> (if_match p $ if_none_match p $ http_smi_get_body p) st
+      | Method__PUT
+      | Method__POST =>
+        fst <$> (if_match p $ if_none_match p $ http_smi_put_body p) st
+      | _ =>
+        send_code 405 [] None;; ret st
+      end
+    else
+      (* TODO: Process proxy request;; *) ret st
+  | None => bad_request;; ret st
   end.
 
 End LoopBody.

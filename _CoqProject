@@ -5,6 +5,7 @@ theories/Common.v
 theories/Message.v
 theories/Printer.v
 theories/Parser.v
+theories/URI.v
 theories/Semantics.v
 theories/Tcp.v
 theories/NetUnix.v

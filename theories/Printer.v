@@ -29,6 +29,7 @@ Definition scheme_to_string (s : http_scheme) : string :=
   match s with
   | Scheme__HTTP  => "http://"
   | Scheme__HTTPS => "https://"
+  | Scheme s    => s ++ "://"
   end.
 
 (* ["user"] to ["user@"] *)
@@ -59,11 +60,14 @@ Definition oquery_to_string (oq : option query) : string :=
   | None   => ""
   end.
 
+Definition absolute_uri_to_string (u : absolute_uri) : string :=
+  let 'URI s a p oq := u in
+  scheme_to_string s ++ authority_to_string a ++ path_to_string p ++ oquery_to_string oq.
+
 Definition target_to_string (t : request_target) : string :=
   match t with
   | RequestTarget__Origin p oq => path_to_string p ++ oquery_to_string oq
-  | RequestTarget__Absolute s a p oq =>
-    scheme_to_string s ++ authority_to_string a ++ path_to_string p ++ oquery_to_string oq
+  | RequestTarget__Absolute u => absolute_uri_to_string u
   | RequestTarget__Authority a => authority_to_string a
   | RequestTarget__Asterisk => "*"
   end.

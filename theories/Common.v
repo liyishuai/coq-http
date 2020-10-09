@@ -2,6 +2,7 @@ From Coq Require Export
      Basics
      Bool
      DecidableClass
+     String
      List
      BinNat.
 From ExtLib Require Export
@@ -24,7 +25,7 @@ Next Obligation.
   - erewrite Decidable_sound_alt; intuition.
 Qed.
 
-Program Instance Decidable_eq_N (x y : N) : Decidable (x = y) :=
+Instance Decidable_eq_N (x y : N) : Decidable (x = y) :=
   { Decidable_witness := N.eqb    x y;
     Decidable_spec    := N.eqb_eq x y }.
 
@@ -51,6 +52,25 @@ Next Obligation.
     split.
     + apply Decidable_spec. reflexivity.
     + apply IHx. reflexivity.
+Qed.
+
+Instance Decidable_eq_string (s1 s2 : string) : Decidable (s1 = s2) :=
+  { Decidable_witness := String.eqb    s1 s2;
+    Decidable_spec    := String.eqb_eq s1 s2 }.
+
+Program Instance Decidable_eq_option {A} `{forall x y : A, Decidable (x = y)}
+        (ox oy : option A) : Decidable (ox = oy) := {
+  Decidable_witness :=
+    match ox, oy with
+    | Some x, Some y => x = y?
+    | None  , None   => true
+    | _     , _      => false
+    end }.
+Solve Obligations with split; intuition; discriminate.
+Next Obligation.
+  destruct ox, oy; intuition; try discriminate;
+    f_equal; apply Decidable_spec; intuition.
+  inversion H0; reflexivity.
 Qed.
 
 Definition get {K V} `{forall x y : K, Decidable (x = y)} (k : K) :

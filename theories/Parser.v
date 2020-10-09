@@ -32,8 +32,12 @@ Fixpoint expectString (s : string) : parser string :=
 
 (** https://www.rfc-editor.org/rfc/rfc3986.html#section-3.1 *)
 Definition parseScheme : parser http_scheme :=
-  (expectString "http://" ;; ret Scheme__HTTP) <|>
-  (expectString "https://";; ret Scheme__HTTPS).
+  s <- string_of_list_ascii <$> until ":"%char;;
+  ret (match s with
+       | "http"  => Scheme__HTTP
+       | "https" => Scheme__HTTPS
+       | _       => Scheme s
+       end).
 
 (** https://www.rfc-editor.org/rfc/rfc3986.html#section-3.2 *)
 Definition parseUserinfo : parser (option string) :=
@@ -82,6 +86,10 @@ Definition parseQuery : parser (option query) :=
         firstExpect "?"%char
         (concat "" <$> many (parsePchar
                                <|> flip String "" <$> satisfy (in_string "/?"))).
+
+Definition parseAbsoluteURI : parser absolute_uri :=
+  liftA2 URI parseScheme (expectString "//";; parseAuthority)
+         <*> parseAbsolutePath <*> parseQuery.
 
 (** https://httpwg.org/http-core/draft-ietf-httpbis-semantics-latest.html#rfc.section.5.7.4 *)
 Definition isobstext (a : ascii) : bool :=
@@ -146,8 +154,7 @@ Definition parseMethod : parser request_method :=
 
 Definition parseTarget : parser request_target :=
   liftA2 RequestTarget__Origin parseAbsolutePath parseQuery <|>
-  liftA2 RequestTarget__Absolute parseScheme parseAuthority <*> parseAbsolutePath
-         <*> parseQuery <|>
+  RequestTarget__Absolute <$> parseAbsoluteURI <|>
   RequestTarget__Authority <$> parseAuthority <|>
   firstExpect "*"%char (ret RequestTarget__Asterisk).
 

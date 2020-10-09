@@ -28,7 +28,7 @@ Import
 Coercion int_of_n : N >-> int.
 
 Definition getport : IO int :=
-  let default : int := 8000 in
+  let default : int := 80 in
   oport <- getenv_opt "PORT";;
   ret (match oport with
        | Some ostr => match int_of_ostring_opt ostr with

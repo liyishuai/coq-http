@@ -23,7 +23,7 @@ stop:
 	fi
 
 SERVER?=ysli/apache
-PORT?=8000
+PORT?=80
 
 server: stop
 	if [ $$(which docker) ]; \
@@ -37,12 +37,12 @@ test: server
 	./TestHttp.native 2> client.log
 
 etag-test:
-	curl -X PUT -d Fine localhost:8000/wat
-	curl -v localhost:8000/wat
-	curl -v -X PUT -H 'If-Match: "WAT"' -d 'Wat' localhost:8000/wat
-	curl localhost:8000/wat
-	curl -v -X DELETE -H 'If-Match: "WAT"' localhost:8000/wat 
-	curl localhost:8000/wat
-	curl -v -X DELETE localhost:8000/wat 
-	curl -v -X PUT -H 'If-Match: "WAT"' -d 'NewWat' localhost:8000/wat
-	curl localhost:8000/wat
+	curl -X PUT -d Fine localhost:$(PORT)/wat
+	curl -v localhost:$(PORT)/wat
+	curl -v -X PUT -H 'If-Match: "WAT"' -d 'Wat' localhost:$(PORT)/wat
+	curl localhost:$(PORT)/wat
+	curl -v -X DELETE -H 'If-Match: "WAT"' localhost:$(PORT)/wat
+	curl localhost:$(PORT)/wat
+	curl -v -X DELETE localhost:$(PORT)/wat
+	curl -v -X PUT -H 'If-Match: "WAT"' -d 'NewWat' localhost:$(PORT)/wat
+	curl localhost:$(PORT)/wat

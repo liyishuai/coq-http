@@ -21,7 +21,10 @@ Variant request_method :=
 
 (** https://www.rfc-editor.org/rfc/rfc3986.html#section-3.1 *)
 (** https://httpwg.org/http-core/draft-ietf-httpbis-semantics-latest.html#resources *)
-Variant http_scheme := Scheme__HTTP | Scheme__HTTPS.
+Variant http_scheme :=
+  Scheme__HTTP
+| Scheme__HTTPS
+| Scheme : string -> http_scheme.
 
 (** https://www.rfc-editor.org/rfc/rfc3986.html#section-3.2 *)
 Record authority :=
@@ -37,11 +40,18 @@ Definition path := string.
 (** https://www.rfc-editor.org/rfc/rfc3986.html#section-3.4 *)
 Definition query := string.
 
+Record absolute_uri :=
+  URI {
+      uri__scheme    : http_scheme;
+      uri__authority : authority;
+      uri__path      : path;
+      uri__query     : option query
+    }.
+
 (** https://httpwg.org/http-core/draft-ietf-httpbis-messaging-latest.html#request.target *)
 Variant request_target :=
   RequestTarget__Origin    : path -> option query -> request_target
-| RequestTarget__Absolute  : http_scheme -> authority ->
-                           path -> option query -> request_target
+| RequestTarget__Absolute  : absolute_uri -> request_target
 | RequestTarget__Authority : authority -> request_target
 | RequestTarget__Asterisk.
 
