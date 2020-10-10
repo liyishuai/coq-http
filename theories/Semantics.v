@@ -28,7 +28,19 @@ Record resource_state {exp_} :=
 Arguments resource_state : clear implicits.
 Arguments ResourceState {_}.
 
-Definition server_state exp_ := list (path * option (resource_state exp_)).
+Definition server_state exp_ :=
+  list (path * option (resource_state exp_)).
+
+(** https://httpwg.org/http-core/draft-ietf-httpbis-semantics-latest.html#rfc.section.7.9.3.2 *)
+
+Definition etag_match (weak : bool) (x y : field_value) : bool :=
+  match x, y with
+  | String "W" (String "/" s1), String "W" (String "/" s2)
+  | String """" _ as s1       , String "W" (String "/" s2)
+  | String "W" (String "/" s1), String """" _ as s2 =>
+    weak &&& (s1 =? s2)
+  | _, _ => x =? y
+  end.
 
 Notation var := N.
 
@@ -37,6 +49,14 @@ Inductive exp : Type -> Set :=
 | Exp__Body  : var -> exp message_body
 | Exp__ETag  : var -> exp field_value
 | Exp__Match : field_value -> exp field_value -> bool -> exp bool.
+
+Fixpoint unwrap {T} (e : exp T) : T :=
+  match e in exp T return T with
+  | Exp__Const b => b
+  | Exp__Body _
+  | Exp__ETag _ => ""
+  | Exp__Match f fx w => etag_match w f (unwrap fx)
+  end.
 
 Fixpoint exp_to_sexp {T} (e : exp T) : sexp :=
     match e with
@@ -54,11 +74,13 @@ Instance Serialize__resource : Serialize (resource_state exp) :=
     let 'ResourceState b e := r in
     [Atom "Resource"; to_sexp b; to_sexp e]%sexp.
 
-Notation connT := nat.
+Notation clientT := nat.
 
 Variant appE {exp_} : Type -> Type :=
-  App__Recv : server_state exp_ -> appE (connT * http_request)
-| App__Send : connT -> http_response exp_ -> appE unit.
+  App__Recv : server_state exp_ -> appE (clientT * http_request)
+| App__Send : clientT -> http_response exp_ -> appE unit
+| App__Forward  : string -> http_request -> appE unit
+| App__Backward : server_state exp_ -> string -> appE (http_response id).
 Arguments appE : clear implicits.
 
 Variant logE : Type -> Set :=
@@ -84,7 +106,7 @@ Context {E} `{Is__smE E}.
 
 Section AfterConn.
 
-Context (c : connT).
+Context (c : clientT).
 
 Definition send_code (sc : status_code) (fs : list (field_line exp))
                      (b : option (exp message_body)) : itree E unit :=
@@ -130,11 +152,11 @@ Section LoopBody.
 Context (st : server_state exp) (methd : request_method) (t : request_target)
    (hs : list (field_line id)) (om : option message_body).
 
-Section TargetAbsolute.
+Section Localhost.
 
 Context (p : path).
 
-Definition http_smi_get_body
+Definition http_smi_get_body'
   : Monads.stateT (server_state exp) (itree E) unit :=
   fun st =>
   (* embed Log ("State before GET: " ++ to_string st);; *)
@@ -154,7 +176,7 @@ Definition http_smi_get_body
   end.
 
 (* PUT or POST *)
-Definition http_smi_put_body
+Definition http_smi_put_body'
   : Monads.stateT (server_state exp) (itree E) unit :=
   fun st =>
   match om with
@@ -169,9 +191,7 @@ Definition http_smi_put_body
   | None => bad_request;; ret (st, tt)
   end.
 
-End TargetAbsolute.
-
-Definition getResource (p : path)
+Definition getResource
   : Monads.stateT (server_state exp) (itree E) (option (resource_state exp)) :=
   fun st =>
     match get p st with
@@ -185,10 +205,12 @@ Definition getResource (p : path)
       ret (update p r st, r)
     end.
 
+Section Precondition.
+
+Context (m : Monads.stateT (server_state exp) (itree E) unit).
+
 (** https://httpwg.org/http-core/draft-ietf-httpbis-semantics-latest.html#rfc.section.12.1.1 *)
-Definition if_match (p : path)
-           (m : Monads.stateT (server_state exp) (itree E) unit)
-  : Monads.stateT (server_state exp) (itree E) unit :=
+Definition if_match : Monads.stateT (server_state exp) (itree E) unit :=
   let accept s := m s in
   let reject s := precondition_failed;; ret (s, tt) in
   fun st =>
@@ -196,7 +218,7 @@ Definition if_match (p : path)
   | Some v =>
     if v =? "*"
     then
-      '(st', r) <- getResource p st;;
+      '(st', r) <- getResource st;;
       match resource__etag <$> r with
       | Some (Some _) => accept st'
       | Some  None    => reject st'
@@ -206,7 +228,7 @@ Definition if_match (p : path)
       match parse (parseCSV parseEntityTag) v with
       | inl _ => bad_request;; ret (st, tt)
       | inr (ts, _) =>
-        '(st', r) <- getResource p st;;
+        '(st', r) <- getResource st;;
         (* embed Log ("Evaluating If-Match " *)
         (*              ++ to_string ts ++ " against state " *)
         (*              ++ to_string st')%string;; *)
@@ -230,9 +252,7 @@ Definition if_match (p : path)
   end.
 
 (** https://httpwg.org/http-core/draft-ietf-httpbis-semantics-latest.html#rfc.section.12.1.2 *)
-Definition if_none_match (p : path)
-           (m : Monads.stateT (server_state exp) (itree E) unit)
-  : Monads.stateT (server_state exp) (itree E) unit :=
+Definition if_none_match : Monads.stateT (server_state exp) (itree E) unit :=
   let accept s := m s in
   let reject s :=
       match methd with
@@ -244,7 +264,7 @@ Definition if_none_match (p : path)
     | Some v =>
       if v =? "*"
       then
-        '(st', r) <- getResource p st;;
+        '(st', r) <- getResource st;;
         match r with
         | Some _ => reject st'
         | None   => accept st'
@@ -253,7 +273,7 @@ Definition if_none_match (p : path)
         match parse (parseCSV parseEntityTag) v with
         | inl _ => bad_request;; ret (st, tt)
         | inr (ts, _) =>
-          '(st', r) <- getResource p st;;
+          '(st', r) <- getResource st;;
           match resource__etag <$> r with
           | Some (Some tx) =>
             b <- fold_left
@@ -271,6 +291,38 @@ Definition if_none_match (p : path)
     | None => accept st
     end.
 
+End Precondition.
+
+Definition http_smi_get_body : Monads.stateT (server_state exp) (itree E) unit
+  := if_match $ if_none_match http_smi_get_body'.
+
+Definition http_smi_put_body : Monads.stateT (server_state exp) (itree E) unit
+  := if_match $ if_none_match http_smi_put_body'.
+
+End Localhost.
+
+Section Proxy.
+
+Context (u : absolute_uri).
+
+Definition removeField (n : field_name) : list (field_line id) :=
+  filter (fun f => negb $ fold (String ∘ tolower) "" (field__name f) =?
+                fold (String ∘ tolower) "" n) hs.
+
+Definition updateField (n : field_name) (v : field_value) : list (field_line id)
+  := Field n v :: removeField n.
+
+Definition forward_request : itree E (http_response id) :=
+  let 'URI s (Authority ou h op) p oq := u in
+  embed App__Forward h
+        (Request (RequestLine methd
+                              (RequestTarget__Origin p oq)
+                              (Version 1 1))
+                 (updateField "Host" h) om);;
+  embed App__Backward st h.
+
+End Proxy.
+
 Definition target_uri : option absolute_uri :=
   let mh : option authority :=
       match findField "Host" hs with
@@ -279,7 +331,7 @@ Definition target_uri : option absolute_uri :=
         | inl _      => None
         | inr (a, _) => Some a
         end%string
-      | None   => Some $ Authority None "localhost" None
+      | None   => Some $ Authority None "127.0.0.1" None
       end in
   match t with
   | RequestTarget__Absolute u =>
@@ -295,6 +347,20 @@ Definition target_uri : option absolute_uri :=
   | RequestTarget__Asterisk    => h <- mh;; ret (URI Scheme__HTTP h "" None)
   end.
 
+Definition wrap_field (f : field_line id) : field_line exp :=
+  let 'Field n v := f in Field n (Exp__Const v).
+
+Definition unwrap_field (f : field_line exp) : field_line id :=
+  let 'Field n v := f in Field n (unwrap v).
+
+Definition wrap_response (r : http_response id) : http_response exp :=
+  let 'Response l f ob := r in
+  Response l (map wrap_field f) (Exp__Const <$> (ob : option message_body)).
+
+Definition unwrap_response (r : http_response exp) : http_response id :=
+  let 'Response l f ob := r in
+  Response l (map unwrap_field f) (unwrap <$> ob : option message_body).
+
 Definition http_smi_body : itree E (server_state exp) :=
   match target_uri with
   | Some u =>
@@ -303,15 +369,16 @@ Definition http_smi_body : itree E (server_state exp) :=
     then
       match methd with
       | Method__GET =>
-        fst <$> (if_match p $ if_none_match p $ http_smi_get_body p) st
+        fst <$> http_smi_get_body p st
       | Method__PUT
       | Method__POST =>
-        fst <$> (if_match p $ if_none_match p $ http_smi_put_body p) st
+        fst <$> http_smi_put_body p st
       | _ =>
         send_code 405 [] None;; ret st
       end
     else
-      (* TODO: Process proxy request;; *) ret st
+      forward_request u >>= embed App__Send c ∘ wrap_response;;
+      ret st
   | None => bad_request;; ret st
   end.
 

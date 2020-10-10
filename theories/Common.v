@@ -19,9 +19,9 @@ Program Instance Decidable_not {P} `{Decidable P} : Decidable (~ P) := {
   Decidable_witness := negb (P?)
 }.
 Next Obligation.
-  split; intro.
+  intuition.
   - apply negb_true_iff in H0.
-    eapply Decidable_complete_alt; intuition.
+    eapply Decidable_complete_alt; assumption.
   - erewrite Decidable_sound_alt; intuition.
 Qed.
 
@@ -73,6 +73,20 @@ Next Obligation.
   inversion H0; reflexivity.
 Qed.
 
+Program Instance Decidable_eq_sum {A B} `{forall x y : A, Decidable (x = y)}
+        `{forall x y : B, Decidable (x = y)} (x y : A + B) : Decidable (x = y) := {
+  Decidable_witness :=
+    match x, y with
+    | inl x, inl y
+    | inr x, inr y => x = y?
+    | _    , _     => false
+    end }.
+Solve Obligations with split; intuition; discriminate.
+Next Obligation.
+  intuition; try discriminate; f_equal; inversion H1;
+    apply Decidable_spec; intuition.
+Qed.
+
 Definition get {K V} `{forall x y : K, Decidable (x = y)} (k : K) :
   list (K * V) -> option V :=
   fmap snd ∘ find ((fun kv => k = fst kv?)).
@@ -87,3 +101,15 @@ Definition put {K V} : K -> V -> list (K * V) -> list (K * V) :=
 Definition update {K V} `{forall x y : K, Decidable (x <> y)} (k : K) (v : V)
   : list (K * V) -> list (K * V) :=
   put k v ∘ delete k.
+
+Fixpoint pick {A} (f : A -> bool) (l : list A) : option (A * list A) :=
+  match l with
+  | [] => None
+  | a :: tl =>
+    if f a
+    then Some (a, tl)
+    else match pick f tl with
+         | Some (x, l') => Some (x, a :: l')
+         | None => None
+         end
+  end.

@@ -20,7 +20,7 @@ Fixpoint findResponse (s : conn_state)
     | inr (r, str') =>
       prerr_endline ("==============RECEIVED=============="
                        ++ to_string c ++ CRLF ++ response_to_string r);;
-      ret (Some (Packet 0 c (inr r)), (c, (f, str')) :: t)
+      ret (Some (Packet None c (inr r)), (c, (f, str')) :: t)
     end
   end.
 
@@ -174,8 +174,9 @@ Fixpoint execute' {R} (fuel : nat) (s : conn_state) (m : itree tE R)
         match ge in genE Y return (Y -> _) -> _ with
         | Gen ss es =>
           fun k =>
-            c <- io_or (ret $ S $ length s) (io_choose 1%nat (map fst s));;
-            p <- Packet c 0 ∘ inl <$> gen_request ss es;;
+            (* TODO: distinguish origin from client *)
+            c <- io_or (ret $ Some $ inl $ S $ length s) (io_choose (Some (inl 1%nat)) (map fst s));;
+            p <- Packet c None ∘ inl <$> gen_request ss es;;
             execute' fuel s (k p)
         end k
       | (|||le|) =>

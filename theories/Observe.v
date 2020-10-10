@@ -7,13 +7,6 @@ Variant observeE : Type -> Type :=
   Observe__ToServer : server_state exp -> observeE (packetT id)
 | Observe__ToClient : observeE (packetT id).
 
-Definition wrap_field (f : field_line id) : field_line exp :=
-  let 'Field n v := f in Field n (Exp__Const v).
-
-Definition wrap_response (r : http_response id) : http_response exp :=
-  let 'Response l f ob := r in
-  Response l (map wrap_field f) (Exp__Const <$> (ob : option message_body)).
-
 Definition wrap_payload : payloadT id -> payloadT exp :=
   fmap wrap_response.
 
@@ -37,12 +30,13 @@ Class Is__oE E `{failureE -< E} `{nondetE -< E}
 Notation oE := (failureE +' nondetE +' decideE +' unifyE +' logE +' observeE).
 Instance oE_Is__oE : Is__oE oE. Defined.
 
+(* TODO: distinguish proxy from clients *)
 Definition dualize {E R} `{Is__oE E} (e : netE R) : itree E R :=
   match e in netE R return _ R with
-  | Net__In st => wrap_packet <$> embed Observe__ToServer st
+  | Net__In st _ => wrap_packet <$> embed Observe__ToServer st
   | Net__Out (Packet s0 d0 p0) =>
     '(Packet s d p) <- trigger Observe__ToClient;;
-    if (s =? s0) &&& (d =? d0)
+    if (s = s0?) &&& (d = d0?)
     then match p0, p with
          | inl _, _
          | _, inl _ => throw "Expect response but observed request"

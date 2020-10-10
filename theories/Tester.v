@@ -39,17 +39,6 @@ Definition fresh_etag (s : exp_state) : exp_state * var :=
   let x := fresh_var es in
   (bs, (x, inr []) :: es, x).
 
-(** https://httpwg.org/http-core/draft-ietf-httpbis-semantics-latest.html#rfc.section.7.9.3.2 *)
-
-Definition etag_match (weak : bool) (x y : field_value) : bool :=
-  match x, y with
-  | String "W" (String "/" s1), String "W" (String "/" s2)
-  | String """" _ as s1       , String "W" (String "/" s2)
-  | String "W" (String "/" s1), String """" _ as s2 =>
-    weak &&& (s1 =? s2)
-  | _, _ => x =? y
-  end.
-
 Definition assert (w : bool) (x : var) (v : field_value)(s : exp_state)
   : string + exp_state :=
   let '(n, bs, es) := s in
