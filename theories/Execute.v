@@ -172,7 +172,7 @@ Fixpoint execute' {R} (fuel : nat) (s : conn_state) (m : itree tE R)
         end k
       | (||ge|) =>
         match ge in genE Y return (Y -> _) -> _ with
-        | Gen ss es =>
+        | Gen ss _ es =>
           fun k =>
             (* TODO: distinguish origin from client *)
             c <- io_or (ret $ Some $ inl $ S $ length s) (io_choose (Some (inl 1%nat)) (map fst s));;

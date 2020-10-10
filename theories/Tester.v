@@ -87,7 +87,8 @@ Definition unify {T} (e : exp T) (v : T) (s : exp_state) : string + exp_state :=
 
 Variant testerE : Type -> Type :=
   Tester__Recv : testerE (packetT id)
-| Tester__Send : server_state exp -> exp_state -> testerE (packetT id).
+| Tester__Send : server_state exp -> option string ->
+               exp_state -> testerE (packetT id).
 
 Class Is__stE E `{failureE -< E} `{nondetE -< E}
       `{decideE -< E} `{logE -< E} `{testerE -< E}.
@@ -151,7 +152,7 @@ Definition instantiate_observe {E A} `{Is__stE E} (e : observeE A)
   : Monads.stateT exp_state (itree E) A :=
   fun s =>
     match e with
-    | Observe__ToServer st => pkt <- embed Tester__Send st s;; Ret (s, pkt)
+    | Observe__ToServer st oh => pkt <- embed Tester__Send st oh s;; Ret (s, pkt)
     | Observe__ToClient => pkt <- trigger Tester__Recv;; Ret (s, pkt)
     end.
 
@@ -180,7 +181,7 @@ CoFixpoint match_event {T R} (e0 : testerE R) (r : R) (m : itree stE T)
     match e with
     | (||||oe) =>
       match oe in testerE Y, e0 in testerE R return (Y -> _) -> R -> _ with
-      | Tester__Send _ _, Tester__Send _ _
+      | Tester__Send _ _ _, Tester__Send _ _ _
       | Tester__Recv    , Tester__Recv => id
       | _, _ => fun _ _ => throw "Unexpected event"
       end k r
@@ -192,7 +193,7 @@ Definition match_observe {T R} (e : testerE T) (r : T) (l : list (itree stE R))
   : list (itree stE R) := map (match_event e r) l.
 
 Variant genE : Type -> Type :=
-  Gen : server_state exp -> exp_state -> genE (packetT id).
+  Gen : server_state exp -> option string -> exp_state -> genE (packetT id).
 
 Variant clientE : Type -> Type :=
 | Client__Recv : clientE (option (packetT id))
@@ -235,10 +236,10 @@ CoFixpoint backtrack' {E R} `{Is__tE E} (others : list (itree stE R))
       end k
     | (||||te) =>
       match te in testerE Y return (Y -> _) -> _ with
-      | Tester__Send st es =>
-        fun k => pkt <- embed Gen st es;;
+      | Tester__Send st oh es =>
+        fun k => pkt <- embed Gen st oh es;;
               embed Client__Send pkt;;
-              Tau (backtrack' (match_observe (Tester__Send st es) pkt others)
+              Tau (backtrack' (match_observe (Tester__Send st oh es) pkt others)
                               (k pkt))
       | Tester__Recv =>
         fun k => opkt <- trigger Client__Recv;;
