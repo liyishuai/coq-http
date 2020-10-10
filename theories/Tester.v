@@ -86,7 +86,7 @@ Definition unify {T} (e : exp T) (v : T) (s : exp_state) : string + exp_state :=
   end v s.
 
 Variant testerE : Type -> Type :=
-  Tester__Recv : testerE (packetT id)
+  Tester__Recv : option authority -> testerE (packetT id)
 | Tester__Send : server_state exp -> option authority ->
                exp_state -> testerE (packetT id).
 
@@ -153,7 +153,7 @@ Definition instantiate_observe {E A} `{Is__stE E} (e : observeE A)
   fun s =>
     match e with
     | Observe__ToServer st oh => pkt <- embed Tester__Send st oh s;; Ret (s, pkt)
-    | Observe__ToClient => pkt <- trigger Tester__Recv;; Ret (s, pkt)
+    | Observe__FromServer  oa => pkt <- embed Tester__Recv oa;; Ret (s, pkt)
     end.
 
 Definition liftState {S A} {F : Type -> Type} `{Functor F} (aF : F A)
@@ -182,7 +182,7 @@ CoFixpoint match_event {T R} (e0 : testerE R) (r : R) (m : itree stE T)
     | (||||oe) =>
       match oe in testerE Y, e0 in testerE R return (Y -> _) -> R -> _ with
       | Tester__Send _ _ _, Tester__Send _ _ _
-      | Tester__Recv    , Tester__Recv => id
+      | Tester__Recv _    , Tester__Recv _ => id
       | _, _ => fun _ _ => throw "Unexpected event"
       end k r
     | _ => vis e (match_event e0 r ∘ k)
@@ -196,7 +196,7 @@ Variant genE : Type -> Type :=
   Gen : server_state exp -> option authority -> exp_state -> genE (packetT id).
 
 Variant clientE : Type -> Type :=
-| Client__Recv : clientE (option (packetT id))
+| Client__Recv : option authority -> clientE (option (packetT id))
 | Client__Send : packetT id -> clientE unit.
 
 Class Is__tE E `{failureE -< E} `{nondetE -< E}
@@ -241,11 +241,11 @@ CoFixpoint backtrack' {E R} `{Is__tE E} (others : list (itree stE R))
               embed Client__Send pkt;;
               Tau (backtrack' (match_observe (Tester__Send st oh es) pkt others)
                               (k pkt))
-      | Tester__Recv =>
-        fun k => opkt <- trigger Client__Recv;;
+      | Tester__Recv oa =>
+        fun k => opkt <- embed Client__Recv oa;;
               match opkt with
               | Some pkt =>
-                Tau (backtrack' (match_observe Tester__Recv pkt others) (k pkt))
+                Tau (backtrack' (match_observe (Tester__Recv oa) pkt others) (k pkt))
               | None =>
                 match others with
                 | []              => Tau (backtrack' [] m)

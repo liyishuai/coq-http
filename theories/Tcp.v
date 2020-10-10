@@ -1,7 +1,7 @@
 From Coq Require Export
      Nat.
 From HTTP Require Export
-     URI
+     Instances
      Semantics.
 Export SumNotations.
 Open Scope nat_scope.

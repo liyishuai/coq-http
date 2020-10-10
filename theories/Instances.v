@@ -1,8 +1,33 @@
-From Coq Require Export
-     DecidableClass.
-From HTTP Require Export
+From HTTP Require Import
      Common
      Message.
+
+Program Instance Decidable_eq_method (x y : request_method) : Decidable (x = y) := {
+  Decidable_witness :=
+    match x, y with
+    | Method__GET    , Method__GET
+    | Method__HEAD   , Method__HEAD
+    | Method__POST   , Method__POST
+    | Method__PUT    , Method__PUT
+    | Method__DELETE , Method__DELETE
+    | Method__CONNECT, Method__CONNECT
+    | Method__OPTIONS, Method__OPTIONS
+    | Method__TRACE  , Method__TRACE => true
+    | Method sx    , Method sy => sx = sy?
+    | _, _ => false
+    end }.
+Solve Obligations with split; intuition; try discriminate.
+Next Obligation.
+  intuition.
+  - destruct x, y; try discriminate; intuition.
+    f_equal.
+    apply eqb_eq.
+    assumption.
+  - subst.
+    destruct y; intuition.
+    apply eqb_eq.
+    reflexivity.
+Qed.
 
 Program Instance Decidable_eq_scheme (x y : http_scheme) : Decidable (x = y) :=
   { Decidable_witness :=

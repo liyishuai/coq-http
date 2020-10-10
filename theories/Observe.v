@@ -2,35 +2,8 @@ From ITree Require Export
      Exception.
 From HTTP Require Export
      Printer
-     URI
+     Instances
      Tcp.
-
-Program Instance Decidable_eq_method (x y : request_method) : Decidable (x = y) := {
-  Decidable_witness :=
-    match x, y with
-    | Method__GET    , Method__GET
-    | Method__HEAD   , Method__HEAD
-    | Method__POST   , Method__POST
-    | Method__PUT    , Method__PUT
-    | Method__DELETE , Method__DELETE
-    | Method__CONNECT, Method__CONNECT
-    | Method__OPTIONS, Method__OPTIONS
-    | Method__TRACE  , Method__TRACE => true
-    | Method sx    , Method sy => sx = sy?
-    | _, _ => false
-    end }.
-Solve Obligations with split; intuition; try discriminate.
-Next Obligation.
-  intuition.
-  - destruct x, y; try discriminate; intuition.
-    f_equal.
-    apply eqb_eq.
-    assumption.
-  - subst.
-    destruct y; intuition.
-    apply eqb_eq.
-    reflexivity.
-Qed.
 
 Definition wrap_payload : payloadT id -> payloadT exp :=
   fmap wrap_response.
@@ -41,7 +14,7 @@ Definition wrap_packet (pkt : packetT id) : packetT exp :=
 
 Variant observeE : Type -> Type :=
   Observe__ToServer : server_state exp -> option authority -> observeE (packetT id)
-| Observe__FromServer: observeE (packetT id).
+| Observe__FromServer : option authority -> observeE (packetT id).
 
 Variant decideE : Type -> Set :=
   Decide : decideE bool.
@@ -65,7 +38,8 @@ Definition dualize {E R} `{Is__oE E} (e : netE R) : itree E R :=
   | Net__In st oh => wrap_packet <$> embed Observe__ToServer st oh
   | Net__Out (Packet s0 d0 p0) =>
     '(Packet s d p) <- match d0 with
-                      | Some _ => trigger Observe__FromServer
+                      | Some (inl _) => embed Observe__FromServer None
+                      | Some (inr a) => embed Observe__FromServer (Some a)
                       | None   => throw "Network loop in model"
                       end;;
     if (s = s0?) &&& (d = d0?)

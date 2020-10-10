@@ -24,10 +24,11 @@ Fixpoint findResponse (s : conn_state)
     end
   end.
 
+(* TODO: separate proxy from client *)
 Definition client_io : clientE ~> stateT conn_state IO :=
   fun _ ce =>
     match ce with
-    | Client__Recv   => mkStateT (fun s0 => execStateT recv_bytes s0 >>= findResponse)
+    | Client__Recv _ => mkStateT (fun s0 => execStateT recv_bytes s0 >>= findResponse)
     | Client__Send p => mkStateT (fun s0 => s1 <- execStateT (send_request p) s0;;
                                       ret (tt, s1))
     end.
