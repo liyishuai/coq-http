@@ -20,7 +20,7 @@ Fixpoint findResponse (s : conn_state)
     | inr (r, str') =>
       prerr_endline ("==============RECEIVED=============="
                        ++ to_string c ++ CRLF ++ response_to_string r);;
-      ret (Some (Packet None c (inr r)), (c, (f, str')) :: t)
+      ret (Some (Packet None (Some $ inl c) (inr r)), (c, (f, str')) :: t)
     end
   end.
 
@@ -92,6 +92,7 @@ Definition gen_etag (p : path) (s : server_state exp) (es : exp_state)
 
 Definition random_request (s : server_state exp) (es : exp_state)
   : IO http_request :=
+  port <- to_string <$> getport;;
   m <- io_or (ret Method__GET) (ret Method__PUT);;
   p <- gen_path s;;
   let l : request_line :=
@@ -107,14 +108,15 @@ Definition random_request (s : server_state exp) (es : exp_state)
                       (ret []);;
     ret (Request
            l (tag_field
-                ++ [Field "Host" "localhost:8000";
+                ++ [Field "Host" $ "localhost:" ++ port;
                    Field "Content-Length" (to_string $ String.length str1)])
            (Some str1))
-  | _ => ret $ Request l [Field "Host" "localhost:8000"] None
-  end.
+  | _ => ret $ Request l [Field "Host" $ "localhost:" ++ port] None
+  end%string.
 
 Definition gen_request' (p : path) (s : server_state exp)
            (es : exp_state) : IO http_request :=
+  port <- to_string <$> getport;;
   match get p s with
   | Some (Some _) =>
     str0 <- gen_string;;
@@ -124,14 +126,14 @@ Definition gen_request' (p : path) (s : server_state exp)
         RequestLine Method__PUT (RequestTarget__Origin p None) (Version 1 1) in
     let str1 : string := p ++ ": " ++ str0 in
     ret (Request
-           l [Field "Host" "localhost:8000";
+           l [Field "Host" $ "localhost:" ++ port;
              Field "Content-Length" (to_string $ String.length str1);
              Field "If-Match" (t : field_value)]
            (Some str1) : http_request)
       ) (let l : request_line :=
              RequestLine Method__GET (RequestTarget__Origin p None) (Version 1 1) in
          ret (Request
-                l [Field "Host" "localhost:8000";
+                l [Field "Host" $ "localhost:" ++ port;
                   Field "If-None-Match" (t : field_value)] None : http_request))
   | Some None
   | None =>
@@ -140,12 +142,12 @@ Definition gen_request' (p : path) (s : server_state exp)
            str0 <- gen_string;;
            let str1 : string := p ++ ": " ++ str0 in
            ret $ Request
-               l [Field "Host" "localhost:8000";
+               l [Field "Host" $ "localhost:" ++ port;
                  Field "Content-Length" (to_string $ String.length str1)]
                (Some str1))
           (let l : request_line :=
                RequestLine Method__GET (RequestTarget__Origin p None) (Version 1 1) in
-           ret (Request l [Field "Host" "localhost:8000"] None : http_request))
+           ret (Request l [Field "Host" $ "localhost:" ++ port] None : http_request))
   end.
 
 Definition gen_request (s : server_state exp) (es : exp_state) : IO http_request :=
@@ -172,12 +174,17 @@ Fixpoint execute' {R} (fuel : nat) (s : conn_state) (m : itree tE R)
         end k
       | (||ge|) =>
         match ge in genE Y return (Y -> _) -> _ with
-        | Gen ss _ es =>
+        | Gen ss oh es =>
           fun k =>
-            (* TODO: distinguish origin from client *)
-            c <- io_or (ret $ Some $ inl $ S $ length s) (io_choose (Some (inl 1%nat)) (map fst s));;
-            p <- Packet c None ∘ inl <$> gen_request ss es;;
-            execute' fuel s (k p)
+            match oh with
+            | Some h =>
+              failwith ""
+            | None =>
+              c <- io_or (ret $ S $ length s)
+                        (io_choose 1%nat (map fst s));;
+              p <- Packet (Some $ inl c) None ∘ inl <$> gen_request ss es;;
+              execute' fuel s (k p)
+            end
         end k
       | (|||le|) =>
         match le in logE Y return (Y -> _) -> _ with

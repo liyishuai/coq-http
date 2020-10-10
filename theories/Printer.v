@@ -1,13 +1,17 @@
 From Coq Require Import
      Ascii
+     Basics
      NArith
      String
      DecimalString.
+From Ceres Require Export
+     Ceres.
 From ExtLib Require Export
      Extras.
 From HTTP Require Export
      Message.
 Export FunNotation.
+Open Scope program_scope.
 
 Definition N_to_string (n : N) : string :=
   NilZero.string_of_uint (N.to_uint n).
@@ -50,6 +54,9 @@ Definition authority_to_string (s : authority) : string :=
   userinfo_to_string (authority__userinfo s) ++
   authority__host s ++
   port_to_string (authority__port s).
+
+Instance Serialize__authority : Serialize authority :=
+  Atom ∘ authority_to_string.
 
 Definition path_to_string : path -> string :=
   String "/".

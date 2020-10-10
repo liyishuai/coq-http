@@ -40,7 +40,7 @@ Definition wrap_packet (pkt : packetT id) : packetT exp :=
   Packet s d (wrap_payload p).
 
 Variant observeE : Type -> Type :=
-  Observe__ToServer : server_state exp -> option string -> observeE (packetT id)
+  Observe__ToServer : server_state exp -> option authority -> observeE (packetT id)
 | Observe__FromServer: observeE (packetT id).
 
 Variant decideE : Type -> Set :=

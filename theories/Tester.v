@@ -87,7 +87,7 @@ Definition unify {T} (e : exp T) (v : T) (s : exp_state) : string + exp_state :=
 
 Variant testerE : Type -> Type :=
   Tester__Recv : testerE (packetT id)
-| Tester__Send : server_state exp -> option string ->
+| Tester__Send : server_state exp -> option authority ->
                exp_state -> testerE (packetT id).
 
 Class Is__stE E `{failureE -< E} `{nondetE -< E}
@@ -193,7 +193,7 @@ Definition match_observe {T R} (e : testerE T) (r : T) (l : list (itree stE R))
   : list (itree stE R) := map (match_event e r) l.
 
 Variant genE : Type -> Type :=
-  Gen : server_state exp -> option string -> exp_state -> genE (packetT id).
+  Gen : server_state exp -> option authority -> exp_state -> genE (packetT id).
 
 Variant clientE : Type -> Type :=
 | Client__Recv : clientE (option (packetT id))

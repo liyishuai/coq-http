@@ -1,6 +1,7 @@
 From Coq Require Export
      Nat.
 From HTTP Require Export
+     URI
      Semantics.
 Export SumNotations.
 Open Scope nat_scope.
@@ -8,7 +9,7 @@ Open Scope sum_scope.
 
 Definition payloadT exp_ : Type := http_request + http_response exp_.
 
-Definition connT := option (clientT + string).
+Definition connT := option (clientT + authority).
 
 Record packetT {exp_} :=
   Packet {
@@ -61,7 +62,7 @@ Definition tcp {E R} `{switchE -< E} `{nondetE -< E} : itree E R :=
      or input output) [].
 
 Variant netE : Type -> Type :=
-  Net__In  : server_state exp -> option string -> netE (packetT exp)
+  Net__In  : server_state exp -> option authority -> netE (packetT exp)
 | Net__Out : packetT exp -> netE unit.
 
 Class Is__nE E `{netE -< E} `{nondetE -< E} `{logE -< E} `{symE exp -< E}.
@@ -75,9 +76,9 @@ Definition packet_from_client {exp_} (p : packetT exp_) : bool :=
   | Some (inl _) => true
   | _            => false
   end.
-Definition packet_from_origin {exp_} (p : packetT exp_) : bool :=
+Definition packet_from_origin {exp_} (a0 : authority) (p : packetT exp_) : bool :=
   match packet__src p with
-  | Some (inr _) => true
+  | Some (inr a) => a0 = a?
   | _            => false
   end.
 
@@ -142,14 +143,13 @@ CoFixpoint compose' {E R} `{Is__nE E}
                             net (k tt))
       | App__Backward st h =>
         fun k =>
-          match pick packet_from_origin bfi with
+          match pick (packet_from_origin h) bfi with
           | None => step__net st (Some h)
           | Some (pkt, bi') =>
-            let 'Packet s _ p := pkt in
-            match s, p with
-            | Some (inr h), inr r =>
+            match packet__payload pkt with
+            | inr r =>
               Tau (compose' bi' bfo net (k (unwrap_response r)))
-            | _, _ => Tau (compose' bi' bfo net app) (* drop the packet *)
+            | _ => Tau (compose' bi' bfo net app) (* drop the packet *)
             end
           end
       end ka
