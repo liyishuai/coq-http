@@ -6,20 +6,6 @@ From HTTP Require Export
 Open Scope N_scope.
 Open Scope string_scope.
 
-Instance Serialize__payloadT : Serialize (payloadT id) :=
-  fun p =>
-    match p with
-    | inl r => Atom $ request_to_string  r
-    | inr r => Atom $ response_to_string r
-    end.
-
-Instance Serialize__packetT : Serialize (packetT id) :=
-  fun pkt =>
-    let 'Packet s d p := pkt in
-    [[Atom "Src"; to_sexp s];
-    [Atom "Dst"; to_sexp d];
-    [Atom "Msg"; to_sexp p]]%sexp.
-
 Instance Serialize__field : Serialize (field_line exp) :=
   fun f => let 'Field n v := f in
         [to_sexp n; to_sexp v]%sexp.
@@ -152,8 +138,12 @@ Definition instantiate_observe {E A} `{Is__stE E} (e : observeE A)
   : Monads.stateT exp_state (itree E) A :=
   fun s =>
     match e with
-    | Observe__ToServer st oh => pkt <- embed Tester__Send st oh s;; Ret (s, pkt)
-    | Observe__FromServer  oa => pkt <- embed Tester__Recv oa;; Ret (s, pkt)
+    | Observe__ToServer st oh =>
+      pkt <- embed Tester__Send st oh s;;
+      Ret (s, pkt)
+    | Observe__FromServer  oa =>
+      pkt <- embed Tester__Recv oa;;
+      Ret (s, pkt)
     end.
 
 Definition liftState {S A} {F : Type -> Type} `{Functor F} (aF : F A)
@@ -197,7 +187,7 @@ Variant genE : Type -> Type :=
 
 Variant clientE : Type -> Type :=
 | Client__Recv : option authority -> clientE (option (packetT id))
-| Client__Send : packetT id -> clientE unit.
+| Client__Send : packetT id -> clientE bool.
 
 Class Is__tE E `{failureE -< E} `{nondetE -< E}
       `{genE -< E} `{logE -< E} `{clientE -< E}.
@@ -214,7 +204,7 @@ CoFixpoint backtrack' {E R} `{Is__tE E} (others : list (itree stE R))
         match others with
         | [] => throw err
         | other :: others' =>
-          (* embed Log ("Retry upon " ++ err);; *)
+          embed Log ("Retry upon " ++ err);;
           Tau (backtrack' others' other)
         end in
     match e with
@@ -238,9 +228,11 @@ CoFixpoint backtrack' {E R} `{Is__tE E} (others : list (itree stE R))
       match te in testerE Y return (Y -> _) -> _ with
       | Tester__Send st oh es =>
         fun k => pkt <- embed Gen st oh es;;
-              embed Client__Send pkt;;
-              Tau (backtrack' (match_observe (Tester__Send st oh es) pkt others)
-                              (k pkt))
+              b <- embed Client__Send pkt;;
+              if b : bool
+              then Tau (backtrack' (match_observe (Tester__Send st oh es)
+                                                  pkt others) (k pkt))
+              else catch "Not ready to send"
       | Tester__Recv oa =>
         fun k => opkt <- embed Client__Recv oa;;
               match opkt with

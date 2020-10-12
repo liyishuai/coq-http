@@ -24,13 +24,62 @@ Fixpoint findResponse (s : conn_state)
     end
   end.
 
+Fixpoint findRequest (s : origin_state) :
+  IO (option (packetT id) * origin_state) :=
+  match s with
+  | [] => ret (None, [])
+  | afs :: t =>
+    let '(a, (f, str, _, ss)) := afs in
+    match parse parseRequest str with
+    | inl (Some err) =>
+      failwith $ "Bad request " ++ to_string str ++ " received on authority "
+               ++ to_string a ++ ", error message: " ++ err
+    | inl None => '(op, t') <- findRequest t;;
+                 ret (op, afs :: t')
+    | inr (r, str') =>
+      prerr_endline ("==============RECEIVED=============="
+                       ++ to_string a ++ CRLF ++ request_to_string r);;
+      ret (Some (Packet None (Some $ inr a) (inl r)), (a, (f, str', Some r, ss)) :: t)
+    end
+  end.
+
+Definition tester_state : Type := conn_state * origin_state.
+
 (* TODO: separate proxy from client *)
-Definition client_io : clientE ~> stateT conn_state IO :=
+Definition client_io : clientE ~> stateT tester_state IO :=
   fun _ ce =>
     match ce with
-    | Client__Recv _ => mkStateT (fun s0 => execStateT recv_bytes s0 >>= findResponse)
-    | Client__Send p => mkStateT (fun s0 => s1 <- execStateT (send_request p) s0;;
-                                      ret (tt, s1))
+    | Client__Recv oa =>
+      mkStateT
+        (fun s0 =>
+           let '(cs, os) := s0 in
+           match oa with
+           | Some a =>
+             '(op, os') <- execStateT (recv_bytes_origin a) os >>= findRequest;;
+             ret (op, (cs,  os'))
+           | None =>
+             '(op, cs') <- execStateT recv_bytes cs >>= findResponse;;
+             ret (op, (cs', os))
+           end)
+    | Client__Send pkt =>
+      let 'Packet s _ p := pkt in
+      mkStateT
+        $ fun s0 =>
+            let '(cs, os) := s0 in
+            match s, p with
+            | None, _ =>
+              failwith "Tester cannot send from server"
+            | Some (inl _), inr _ =>
+              failwith "Unexpected sending response from client"
+            | Some (inr _), inl _ =>
+              failwith "Unexpected sending request from origin"
+            | Some (inl c), inl r =>
+              cs' <- execStateT (send_request c r) cs;;
+              ret (true, (cs', os))
+            | Some (inr a), inr r =>
+              '(b, os') <- runStateT (send_response a r) os;;
+              ret (b, (cs,  os'))
+            end
     end.
 
 Definition io_choose {A} (default : A) (l : list A) : IO A :=
@@ -93,11 +142,15 @@ Definition gen_etag (p : path) (s : server_state exp) (es : exp_state)
 
 Definition random_request (s : server_state exp) (es : exp_state)
   : IO http_request :=
-  port <- to_string <$> getport;;
   m <- io_or (ret Method__GET) (ret Method__PUT);;
   p <- gen_path s;;
+  port <- getport;;
+  a <- io_or (ret $ Authority None "localhost" (Some port))
+            (ret $ Authority None "host.docker.internal" (Some 80));;
+  let uri : absolute_uri :=
+      URI Scheme__HTTP a p None in
   let l : request_line :=
-      RequestLine m (RequestTarget__Origin p None) (Version 1 1) in
+      RequestLine m (RequestTarget__Absolute uri) (Version 1 1) in
   match m with
   | Method__PUT =>
     str0 <- gen_string;;
@@ -109,10 +162,10 @@ Definition random_request (s : server_state exp) (es : exp_state)
                       (ret []);;
     ret (Request
            l (tag_field
-                ++ [Field "Host" $ "localhost:" ++ port;
+                ++ [Field "Host" $ authority_to_string a;
                    Field "Content-Length" (to_string $ String.length str1)])
            (Some str1))
-  | _ => ret $ Request l [Field "Host" $ "localhost:" ++ port] None
+  | _ => ret $ Request l [Field "Host" $ authority_to_string a] None
   end%string.
 
 Definition gen_request' (p : path) (s : server_state exp)
@@ -155,8 +208,14 @@ Definition gen_request (s : server_state exp) (es : exp_state) : IO http_request
   p <- gen_path s;;
   io_or (gen_request' p s es) (random_request s es).
 
-Fixpoint execute' {R} (fuel : nat) (s : conn_state) (m : itree tE R)
-  : IO (bool * conn_state) :=
+Definition gen_response (ss : server_state exp) (es : exp_state)
+           (a : authority) : stateT origin_state IO (http_response id) :=
+  mkStateT
+    $ fun os =>
+        ret (Response (status_line_of_code 403) [] None, os).
+
+Fixpoint execute' {R} (fuel : nat) (s : tester_state) (m : itree tE R)
+  : IO (bool * tester_state) :=
   match fuel with
   | O => ret (true, s)
   | S fuel =>
@@ -179,10 +238,12 @@ Fixpoint execute' {R} (fuel : nat) (s : conn_state) (m : itree tE R)
           fun k =>
             match oh with
             | Some h =>
-              failwith ""
+              '(p, os') <- runStateT (gen_response ss es h) (snd s);;
+              execute' fuel (fst s, os')
+                       (k $ Packet (Some $ inr h) None $ inr p)
             | None =>
-              c <- io_or (ret $ S $ length s)
-                        (io_choose 1%nat (map fst s));;
+              c <- io_or (ret $ S $ length (fst s))
+                        (io_choose 1%nat (map fst (fst s)));;
               p <- Packet (Some $ inl c) None ∘ inl <$> gen_request ss es;;
               execute' fuel s (k p)
             end
@@ -200,8 +261,15 @@ Fixpoint execute' {R} (fuel : nat) (s : conn_state) (m : itree tE R)
   end.
 
 Definition execute {R} (m : itree tE R) : IO bool :=
-  '(b, s) <- execute' bigNumber [] m;;
-  fold_left (fun m fd => OUnix.close fd;; m) (map (fst ∘ snd) s) (ret tt);;
+  '(b, s) <- execute' bigNumber ([], []) m;;
+  let '(cs, os) := s in
+  fold_left (fun m fd => OUnix.close fd;; m) (map (fst ∘ snd) $ cs)
+            (fold_left
+               (fun m sfdfd =>
+                  let '(sfd, fd) := sfdfd in
+                  OUnix.close fd;;
+                  OUnix.close sfd;;
+                  m) (map (fst ∘ fst ∘ fst ∘ snd) $ os) (ret tt));;
   ret b.
 
 Definition test {R} : itree smE R -> IO bool :=

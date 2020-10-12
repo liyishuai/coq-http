@@ -23,7 +23,7 @@ stop:
 	fi
 
 SERVER?=ysli/apache
-PORT?=80
+PORT?=1080
 
 server: stop
 	if [ $$(which docker) ]; \

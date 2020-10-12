@@ -7,6 +7,7 @@ From ITree Require Export
      Nondeterminism
      ITree.
 From HTTP Require Export
+     Printer
      Parser.
 Export
   FunNotation
@@ -314,11 +315,12 @@ Definition updateField (n : field_name) (v : field_value) : list (field_line id)
 
 Definition forward_request : itree E (http_response id) :=
   let 'URI s (Authority ou h op as a) p oq := u in
-  embed App__Forward a
-        (Request (RequestLine methd
-                              (RequestTarget__Origin p oq)
-                              (Version 1 1))
-                 (updateField "Host" h) om);;
+  let req : http_request :=
+      Request (RequestLine methd
+                           (RequestTarget__Origin p oq)
+                           (Version 1 1))
+              (updateField "Host" $ to_string a) om in
+  embed App__Forward a req;;
   embed App__Backward st a.
 
 End Proxy.
@@ -329,9 +331,15 @@ Definition target_uri : option absolute_uri :=
       | Some a =>
         match parse parseAuthority a with
         | inl _      => None
-        | inr (a, _) => Some a
+        | inr (Authority ou h op, _) =>
+          let h' := if h =? "localhost" then "127.0.0.1" else h in
+          let op' := Some $ match op with
+                            | Some p' => p'
+                            | None    => 80
+                            end in
+          Some (Authority ou h' op')
         end%string
-      | None   => Some $ Authority None "127.0.0.1" None
+      | None   => Some $ Authority None "127.0.0.1" (Some 80)
       end in
   match t with
   | RequestTarget__Absolute u =>
@@ -364,8 +372,8 @@ Definition unwrap_response (r : http_response exp) : http_response id :=
 Definition http_smi_body : itree E (server_state exp) :=
   match target_uri with
   | Some u =>
-    let 'URI s (Authority ou h op) p oq := u in
-    if (h =? "127.0.0.1") &&& (op = Some 80?)
+    let 'URI s (Authority ou h op as a) p oq := u in
+    if (h =? "127.0.0.1") &&& (op = Some 1080?)
     then
       match methd with
       | Method__GET =>

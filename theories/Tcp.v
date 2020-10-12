@@ -109,7 +109,9 @@ CoFixpoint compose' {E R} `{Is__nE E}
             fun k =>
               if packet_to_app pkt
               then Tau (compose' (bfi ++ [pkt]) bfo (k tt) app)
-              else embed Net__Out pkt;;
+              else (* embed Log ("Network emitting packet to " *)
+                   (*              ++ to_string (packet__dst pkt));; *)
+                   embed Net__Out pkt;;
                    Tau (compose' bfi bfo (k tt) app)
           end kn
         | (|ne) =>
@@ -164,7 +166,7 @@ CoFixpoint compose' {E R} `{Is__nE E}
       match le in logE Y return (Y -> _) -> _ with
       | Log str =>
         fun k =>
-          embed Log ("App: " ++ str)%string;;
+          embed Log ("App: " ++ str);;
           Tau (compose' bfi bfo net (k tt))
       end ka
     | (|||se) =>
@@ -175,7 +177,7 @@ CoFixpoint compose' {E R} `{Is__nE E}
           Tau (compose' bfi bfo net (k x))
       end ka
     end
-  end.
+  end%string.
 
 Definition compose_switch {E T} `{Is__nE E} :
   itree (switchE +' nondetE) T -> itree smE T -> itree E T :=

@@ -32,16 +32,32 @@ Class Is__oE E `{failureE -< E} `{nondetE -< E}
 Notation oE := (failureE +' nondetE +' decideE +' unifyE +' logE +' observeE).
 Instance oE_Is__oE : Is__oE oE. Defined.
 
+Instance Serialize__payloadT : Serialize (payloadT id) :=
+  fun p =>
+    match p with
+    | inl r => Atom $ request_to_string  r
+    | inr r => Atom $ response_to_string r
+    end.
+
+Instance Serialize__packetT : Serialize (packetT id) :=
+  fun pkt =>
+    let 'Packet s d p := pkt in
+    [[Atom "Src"; to_sexp s];
+    [Atom "Dst"; to_sexp d];
+    [Atom "Msg"; to_sexp p]]%sexp.
+
 (* TODO: distinguish proxy from clients *)
 Definition dualize {E R} `{Is__oE E} (e : netE R) : itree E R :=
   match e in netE R return _ R with
   | Net__In st oh => wrap_packet <$> embed Observe__ToServer st oh
   | Net__Out (Packet s0 d0 p0) =>
-    '(Packet s d p) <- match d0 with
+    pkt <- match d0 with
                       | Some (inl _) => embed Observe__FromServer None
-                      | Some (inr a) => embed Observe__FromServer (Some a)
+                      | Some (inr a) =>
+                        embed Observe__FromServer (Some a)
                       | None   => throw "Network loop in model"
                       end;;
+    let '(Packet s d p) := pkt in
     if (s = s0?) &&& (d = d0?)
     then match p0, p with
          | inl _, inr _ => throw "Expect request but observed response"
@@ -73,11 +89,11 @@ Definition dualize {E R} `{Is__oE E} (e : netE R) : itree E R :=
                         ++ ", but observed " ++ method_to_string m
              else throw $ "Expect target URI " ++ absolute_uri_to_string u0
                           ++ ", but observed " ++ absolute_uri_to_string u
-           end%string
+           end
          | inr r0, inr r => embed Unify__Response r0 r
          end
     else throw "Unexpected payload observed to client"
-  end.
+  end%string.
 
 Definition observer {E R} `{Is__oE E} (m : itree nE R) : itree E R :=
   interp
