@@ -48,14 +48,18 @@ Definition client_io : clientE ~> stateT tester_state IO :=
     | Client__Recv oa =>
       mkStateT
         (fun s0 =>
-           let '(cs, os) := s0 in
+           let '(cs, os0) := s0 in
+           let recv_client os :=
+               '(op, cs') <- execStateT recv_bytes cs >>= findResponse;;
+               ret (op, (cs', os)) in
            match oa with
            | Some a =>
-             '(op, os') <- execStateT (recv_bytes_origin a) os >>= findRequest;;
-             ret (op, (cs,  os'))
-           | None =>
-             '(op, cs') <- execStateT recv_bytes cs >>= findResponse;;
-             ret (op, (cs', os))
+             '(op, os1) <- execStateT (recv_bytes_origin a) os0 >>= findRequest;;
+             match op with
+             | Some p => ret (Some p, (cs, os1))
+             | None => recv_client os1
+             end
+           | None => recv_client os0
            end)
     | Client__Send pkt =>
       let 'Packet s _ p := pkt in

@@ -48,4 +48,4 @@ etag-test:
 	curl localhost:$(PORT)/wat
 
 proxy-test:
-	curl -v localhost:$(PORT) -x localhost:$(PORT)
+	curl -v wat -x localhost:$(PORT)

@@ -103,15 +103,21 @@ Definition recv_bytes_origin (a : authority) : stateT origin_state IO unit :=
              | Some fd => ret fd
              | None => accept_conn sfd
              end;;
-        buf <- OBytes.create BUFFER_SIZE;;
-        len <- recv fd buf int_zero BUFFER_SIZE [];;
-        if (len <? int_zero)%int
-        then close fd;; ret (tt, s)
-        else if (len =? int_zero)%int
-             then ret (tt, s)
-             else str0 <- from_ostring <$> OBytes.to_string buf;;
-                  let str1 : string := substring 0 (nat_of_int len) str0 in
-                  ret (tt, (sfd, Some fd, str ++ str1, None, ss)).
+        '(fds, _, _) <- select [fd] [] [] (OFloat.of_int 1);;
+        match fds with
+        | [] => ret (tt, s)
+        | [fd] =>
+          buf <- OBytes.create BUFFER_SIZE;;
+          len <- recv fd buf int_zero BUFFER_SIZE [];;
+          if (len <? int_zero)%int
+          then close fd;; ret (tt, s)
+          else if (len =? int_zero)%int
+               then ret (tt, s)
+               else str0 <- from_ostring <$> OBytes.to_string buf;;
+                    let str1 : string := substring 0 (nat_of_int len) str0 in
+                    ret (tt, (sfd, Some fd, str ++ str1, None, ss))
+        | _ :: _ :: _ => failwith "Selecting 1 connection but returned many"
+        end.
 
 Definition send_request (c : clientT) (req : http_request) : stateT conn_state IO unit :=
   let send_bytes fd :=
