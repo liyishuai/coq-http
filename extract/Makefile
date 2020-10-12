@@ -46,3 +46,6 @@ etag-test:
 	curl -v -X DELETE localhost:$(PORT)/wat
 	curl -v -X PUT -H 'If-Match: "WAT"' -d 'NewWat' localhost:$(PORT)/wat
 	curl localhost:$(PORT)/wat
+
+proxy-test:
+	curl -v localhost:$(PORT) -x localhost:$(PORT)

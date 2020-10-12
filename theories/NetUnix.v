@@ -90,40 +90,28 @@ Instance Serialize__conn : Serialize (file_descr * string) :=
   to_sexp ∘ snd.
 
 Definition origin_state : Type :=
-  list (authority * (file_descr * file_descr * string *
-                     option http_request * server_state id)).
+  file_descr * option file_descr * string * option (http_request) * server_state id.
+
+Definition origin_host : authority :=
+  Authority None "host.docker.internal" (Some 80).
 
 Definition recv_bytes_origin (a : authority) : stateT origin_state IO unit :=
-  let recv' sfd fd str or ss s :=
-      '(fds, _, _) <- select [fd] [] [] (OFloat.of_int 1);;
-      match fds with
-      | [] => ret s
-      | [fd] =>
-        buf <- OBytes.create BUFFER_SIZE;;
-        len <- recv fd buf int_zero BUFFER_SIZE [];;
-        if len <? int_zero
-        then close fd;; ret s
-        else if len =? int_zero
-             then ret s
-             else str0 <- from_ostring <$> OBytes.to_string buf;;
-                  let str1 : string := substring 0 (nat_of_int len) str0 in
-                  ret $ update a (sfd, fd, str ++ str1, None, ss) s
-      | _ :: _ :: _ => failwith "Selecting one connection but returned many?"
-      end%int in
   mkStateT
     $ fun s =>
-        match get a s with
-        | Some (sfd, fd, str, or, ss) => pair tt <$> recv' sfd fd str or ss s
-        | None =>
-          let 'Authority _ _ op := a in
-          let port := match op with
-                      | Some p => p
-                      | None   => 80
-                      end in
-          sfd <- create_sock port;;
-          fd <- accept_conn sfd;;
-          pair tt <$> recv' sfd fd "" None [] (put a (sfd, fd, "", None, []) s)
-        end.
+        let '(sfd, ofd, str, or, ss) := s in
+        fd <- match ofd with
+             | Some fd => ret fd
+             | None => accept_conn sfd
+             end;;
+        buf <- OBytes.create BUFFER_SIZE;;
+        len <- recv fd buf int_zero BUFFER_SIZE [];;
+        if (len <? int_zero)%int
+        then close fd;; ret (tt, s)
+        else if (len =? int_zero)%int
+             then ret (tt, s)
+             else str0 <- from_ostring <$> OBytes.to_string buf;;
+                  let str1 : string := substring 0 (nat_of_int len) str0 in
+                  ret (tt, (sfd, Some fd, str ++ str1, None, ss)).
 
 Definition send_request (c : clientT) (req : http_request) : stateT conn_state IO unit :=
   let send_bytes fd :=
@@ -152,26 +140,20 @@ Definition send_request (c : clientT) (req : http_request) : stateT conn_state I
                   ret (tt, s')
          end).
 
-Definition send_response (a : authority) (res : http_response id)
-  : stateT origin_state IO bool :=
-  let send_bytes fd :=
-      let str : string := response_to_string res in
-      buf <- OBytes.of_string str;;
-      let len : int := OBytes.length buf in
-      IO.fix_io
-        (fun send_rec o =>
-           sent <- send fd buf o (len - o)%int [];;
-           if sent <? int_zero
-           then close fd;; ret false
-           else
-             if o + sent =? len
-             then prerr_endline ("================SENT================"
-                                   ++ to_string a ++ CRLF ++ str);;
-                  ret true
-             else send_rec (o + sent))%int int_zero in
-  mkStateT
-    $ fun s =>
-        match get a s with
-        | Some ((((_, fd), _), _), _) => b <- send_bytes fd;; ret (b, s)
-        | None => ret (false, s)
-        end.
+Definition send_response (fd : file_descr) (res : http_response id) : IO bool :=
+  let str : string := response_to_string res in
+  buf <- OBytes.of_string str;;
+  let len : int := OBytes.length buf in
+  b <- IO.fix_io
+    (fun send_rec o =>
+       sent <- send fd buf o (len - o)%int [];;
+       if sent <? int_zero
+       then ret false
+       else
+         if o + sent =? len
+         then prerr_endline ("================SENT================"
+                               ++ to_string origin_host ++ CRLF ++ str);;
+              ret true
+         else send_rec (o + sent))%int int_zero;;
+  close fd;;
+  ret b.

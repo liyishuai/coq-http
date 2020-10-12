@@ -24,24 +24,20 @@ Fixpoint findResponse (s : conn_state)
     end
   end.
 
-Fixpoint findRequest (s : origin_state) :
+Definition findRequest (s : origin_state) :
   IO (option (packetT id) * origin_state) :=
-  match s with
-  | [] => ret (None, [])
-  | afs :: t =>
-    let '(a, (f, str, _, ss)) := afs in
+  let '(fd, str, or, ss) := s in
     match parse parseRequest str with
     | inl (Some err) =>
-      failwith $ "Bad request " ++ to_string str ++ " received on authority "
-               ++ to_string a ++ ", error message: " ++ err
-    | inl None => '(op, t') <- findRequest t;;
-                 ret (op, afs :: t')
+      failwith $ "Bad request " ++ to_string str ++
+               ", error message: " ++ err
+    | inl None => ret (None, s)
     | inr (r, str') =>
       prerr_endline ("==============RECEIVED=============="
-                       ++ to_string a ++ CRLF ++ request_to_string r);;
-      ret (Some (Packet None (Some $ inr a) (inl r)), (a, (f, str', Some r, ss)) :: t)
-    end
-  end.
+                       ++ CRLF ++ request_to_string r);;
+      ret (Some (Packet None (Some $ inr origin_host) (inl r)),
+           (fd, str', Some r, ss))
+    end.
 
 Definition tester_state : Type := conn_state * origin_state.
 
@@ -77,8 +73,12 @@ Definition client_io : clientE ~> stateT tester_state IO :=
               cs' <- execStateT (send_request c r) cs;;
               ret (true, (cs', os))
             | Some (inr a), inr r =>
-              '(b, os') <- runStateT (send_response a r) os;;
-              ret (b, (cs,  os'))
+              let '(sfd, ofd, str, or, ss) := os in
+              b <- match ofd with
+                  | Some fd => send_response fd r
+                  | None    => ret false
+                  end;;
+              ret (b, (cs, (sfd, None, str, or, ss)))
             end
     end.
 
@@ -261,15 +261,11 @@ Fixpoint execute' {R} (fuel : nat) (s : tester_state) (m : itree tE R)
   end.
 
 Definition execute {R} (m : itree tE R) : IO bool :=
-  '(b, s) <- execute' bigNumber ([], []) m;;
+  sfd <- create_sock 80;;
+  '(b, s) <- execute' bigNumber ([], (sfd, None, "", None, [])) m;;
   let '(cs, os) := s in
   fold_left (fun m fd => OUnix.close fd;; m) (map (fst ∘ snd) $ cs)
-            (fold_left
-               (fun m sfdfd =>
-                  let '(sfd, fd) := sfdfd in
-                  OUnix.close fd;;
-                  OUnix.close sfd;;
-                  m) (map (fst ∘ fst ∘ fst ∘ snd) $ os) (ret tt));;
+            (OUnix.close sfd);;
   ret b.
 
 Definition test {R} : itree smE R -> IO bool :=
