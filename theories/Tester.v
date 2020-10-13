@@ -240,8 +240,12 @@ CoFixpoint backtrack' {E R} `{Is__tE E} (others : list (itree stE R))
                 Tau (backtrack' (match_observe (Tester__Recv oa) pkt others) (k pkt))
               | None =>
                 match others with
-                | []              => Tau (backtrack' [] m)
-                | other :: others' => Tau (backtrack' (others' ++ [m]) other)
+                | [] =>
+                  embed Log ("No more choices, retry receiving from " ++ to_string oa);;
+                  Tau (backtrack' [] m)
+                | other :: others' =>
+                  embed Log ("Postpone receiving from " ++ to_string oa);;
+                  Tau (backtrack' (others' ++ [m]) other)
                 end
               end
       end k

@@ -369,11 +369,13 @@ Definition unwrap_response (r : http_response exp) : http_response id :=
   let 'Response l f ob := r in
   Response l (map unwrap_field f) (unwrap <$> ob : option message_body).
 
+Definition server_port : N := 80.
+
 Definition http_smi_body : itree E (server_state exp) :=
   match target_uri with
   | Some u =>
     let 'URI s (Authority ou h op as a) p oq := u in
-    if (h =? "127.0.0.1") &&& (op = Some 1080?)
+    if (h =? "127.0.0.1") &&& (op = Some server_port?)
     then
       match methd with
       | Method__GET =>

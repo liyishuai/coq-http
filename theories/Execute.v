@@ -26,6 +26,7 @@ Fixpoint findResponse (s : conn_state)
 
 Definition findRequest (s : origin_state) :
   IO (option (packetT id) * origin_state) :=
+  oh <- origin_host;;
   let '(fd, str, or, ss) := s in
     match parse parseRequest str with
     | inl (Some err) =>
@@ -35,7 +36,7 @@ Definition findRequest (s : origin_state) :
     | inr (r, str') =>
       prerr_endline ("==============RECEIVED=============="
                        ++ CRLF ++ request_to_string r);;
-      ret (Some (Packet None (Some $ inr origin_host) (inl r)),
+      ret (Some (Packet None (Some $ inr oh) (inl r)),
            (fd, str', Some r, ss))
     end.
 
@@ -51,12 +52,15 @@ Definition client_io : clientE ~> stateT tester_state IO :=
            let '(cs, os0) := s0 in
            let recv_client os :=
                '(op, cs') <- execStateT recv_bytes cs >>= findResponse;;
+               (* prerr_endline ("Client received " ++ to_string op);; *)
                ret (op, (cs', os)) in
            match oa with
            | Some a =>
              '(op, os1) <- execStateT (recv_bytes_origin a) os0 >>= findRequest;;
              match op with
-             | Some p => ret (Some p, (cs, os1))
+             | Some p =>
+               (* prerr_endline ("Proxy received " ++ to_string p);; *)
+               ret (Some p, (cs, os1))
              | None => recv_client os1
              end
            | None => recv_client os0
@@ -148,9 +152,9 @@ Definition random_request (s : server_state exp) (es : exp_state)
   : IO http_request :=
   m <- io_or (ret Method__GET) (ret Method__PUT);;
   p <- gen_path s;;
-  port <- getport;;
-  a <- io_or (ret $ Authority None "localhost" (Some port))
-            (ret $ Authority None "host.docker.internal" (Some 80));;
+  origin_port <- getport;;
+  a <- io_or (ret $ Authority None "localhost" (Some server_port))
+            (ret $ Authority None "host.docker.internal" (Some origin_port));;
   let uri : absolute_uri :=
       URI Scheme__HTTP a p None in
   let l : request_line :=
@@ -174,7 +178,7 @@ Definition random_request (s : server_state exp) (es : exp_state)
 
 Definition gen_request' (p : path) (s : server_state exp)
            (es : exp_state) : IO http_request :=
-  port <- to_string <$> getport;;
+  let port : string := to_string server_port in
   match get p s with
   | Some (Some _) =>
     str0 <- gen_string;;
@@ -184,7 +188,7 @@ Definition gen_request' (p : path) (s : server_state exp)
         RequestLine Method__PUT (RequestTarget__Origin p None) (Version 1 1) in
     let str1 : string := p ++ ": " ++ str0 in
     ret (Request
-           l [Field "Host" $ "localhost:" ++ port;
+           l [Field "Host" $ "localhost:" ++ to_string port;
              Field "Content-Length" (to_string $ String.length str1);
              Field "If-Match" (t : field_value)]
            (Some str1) : http_request)
@@ -265,7 +269,7 @@ Fixpoint execute' {R} (fuel : nat) (s : tester_state) (m : itree tE R)
   end.
 
 Definition execute {R} (m : itree tE R) : IO bool :=
-  sfd <- create_sock 80;;
+  sfd <- getport >>= create_sock;;
   '(b, s) <- execute' bigNumber ([], (sfd, None, "", None, [])) m;;
   let '(cs, os) := s in
   fold_left (fun m fd => OUnix.close fd;; m) (map (fst ∘ snd) $ cs)

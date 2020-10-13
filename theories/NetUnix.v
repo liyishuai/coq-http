@@ -28,7 +28,7 @@ Import
 Coercion int_of_n : N >-> int.
 
 Definition getport : IO N :=
-  let default : N := 1080 in
+  let default : N := 8000 in
   oport <- getenv_opt "PORT";;
   ret (match oport with
        | Some ostr => match int_of_ostring_opt ostr with
@@ -59,7 +59,7 @@ Definition create_conn (c : clientT) : stateT conn_state IO file_descr :=
     (fun s =>
        let iaddr : inet_addr := inet_addr_loopback in
        fd <- socket PF_INET SOCK_STREAM int_zero;;
-       (ADDR_INET iaddr ∘ int_of_n <$> getport) >>= connect fd;;
+       connect fd (ADDR_INET iaddr server_port);;
        ret (fd, (c, (fd, "")) :: s)).
 
 Notation BUFFER_SIZE := 1024.
@@ -92,8 +92,9 @@ Instance Serialize__conn : Serialize (file_descr * string) :=
 Definition origin_state : Type :=
   file_descr * option file_descr * string * option (http_request) * server_state id.
 
-Definition origin_host : authority :=
-  Authority None "host.docker.internal" (Some 80).
+Definition origin_host : IO authority :=
+  port <- getport;;
+  ret (Authority None "host.docker.internal" (Some port)).
 
 Definition recv_bytes_origin (a : authority) : stateT origin_state IO unit :=
   mkStateT
@@ -101,7 +102,8 @@ Definition recv_bytes_origin (a : authority) : stateT origin_state IO unit :=
         let '(sfd, ofd, str, or, ss) := s in
         fd <- match ofd with
              | Some fd => ret fd
-             | None => accept_conn sfd
+             | None =>
+               accept_conn sfd
              end;;
         '(fds, _, _) <- select [fd] [] [] (OFloat.of_int 1);;
         match fds with
@@ -150,6 +152,7 @@ Definition send_response (fd : file_descr) (res : http_response id) : IO bool :=
   let str : string := response_to_string res in
   buf <- OBytes.of_string str;;
   let len : int := OBytes.length buf in
+  oh <- origin_host;;
   b <- IO.fix_io
     (fun send_rec o =>
        sent <- send fd buf o (len - o)%int [];;
@@ -158,7 +161,7 @@ Definition send_response (fd : file_descr) (res : http_response id) : IO bool :=
        else
          if o + sent =? len
          then prerr_endline ("================SENT================"
-                               ++ to_string origin_host ++ CRLF ++ str);;
+                               ++ to_string oh ++ CRLF ++ str);;
               ret true
          else send_rec (o + sent))%int int_zero;;
   close fd;;

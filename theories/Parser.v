@@ -110,8 +110,28 @@ Definition parseToken : parser string :=
   string_of_list_ascii <$> many1 (satisfy istchar).
 
 (** https://httpwg.org/http-core/draft-ietf-httpbis-semantics-latest.html#rfc.section.5.7.3 *)
-Definition parseOWS : parser unit :=
-  many (parseSP <|> parseHTAB);; ret tt.
+Definition parseOWS : parser string :=
+  string_of_list_ascii <$> many (parseSP <|> parseHTAB).
+
+Definition parseBWS : parser string := parseOWS.
+
+(** https://httpwg.org/http-core/draft-ietf-httpbis-semantics-latest.html#rfc.section.5.7.4 *)
+Definition isqdtext (a : ascii) : bool :=
+  ((a =? "009") ||| (a =? " ") ||| (a =? "033") |||
+                (("035" <=? a) &&& (a <=? "091")) |||
+                (("093" <=? a) &&& (a <=? "126")) ||| isobstext a)%char.
+
+Definition parseQdtext : parser string :=
+  flip String "" <$> satisfy isqdtext.
+
+Definition parseQuotedPair : parser string :=
+  liftA2 String (expect "\"%char) $
+         flip String "" <$> (parseHTAB <|> parseSP <|> satisfy isvchar).
+
+Definition parseQuotedString : parser string :=
+  liftA2 String parseDQUOTE $
+         liftA2 append (concat "" <$> many (parseQdtext <|> parseQuotedPair)) $
+         flip String "" <$> parseDQUOTE.
 
 (** https://httpwg.org/http-core/draft-ietf-httpbis-semantics-latest.html#rfc.section.7.9.3.2 *)
 Definition isetagc (a : ascii) : bool :=
@@ -192,6 +212,46 @@ Definition parseFieldLine : parser (field_line id) :=
 Definition parseFieldLines : parser (list (field_line id)) :=
   many (l <- parseFieldLine;; parseCRLF;; ret l).
 
+Record chunk_ext :=
+  ChunkExt {
+      chunk_ext__name : string;
+      chunk_ext__val  : option string
+    }.
+
+(** https://httpwg.org/http-core/draft-ietf-httpbis-messaging-latest.html#rfc.section.7.1 *)
+Definition parseChunkExt1 : parser chunk_ext :=
+  parseBWS;;
+  firstExpect ";"%char
+  (parseBWS;;
+   liftA2 ChunkExt parseToken
+          (maybe
+             (parseBWS;;
+              firstExpect ";"%char
+              (parseToken <|> parseQuotedString)))).
+
+Definition parseChunkExt : parser (list chunk_ext) :=
+  many parseChunkExt1.
+
+Definition parseLastChunk : parser unit :=
+  many1 (expect "0"%char);;
+  maybe parseChunkExt;;
+  parseCRLF.
+
+Definition parseChunk : parser string :=
+  n <- N.to_nat <$> parseHex;;
+  maybe parseChunkExt;;
+  parseCRLF;;
+  cs <- manyN n anyToken;;
+  parseCRLF;;
+  ret (string_of_list_ascii cs).
+
+Definition parseChunkedBody : parser string :=
+  data <- concat "" <$> many parseChunk;;
+  parseLastChunk;;
+  parseFieldLines;;
+  parseCRLF;;
+  ret data.
+
 (** https://httpwg.org/http-core/draft-ietf-httpbis-messaging-latest.html#rfc.section.6 *)
 Definition findField {exp_} (n : field_name) (fs : list (field_line exp_))
   : option (exp_ field_value) :=
@@ -200,17 +260,25 @@ Definition findField {exp_} (n : field_name) (fs : list (field_line exp_))
 
 Definition parseBody (fs : list (field_line id))
   : parser (option message_body) :=
-  match findField "Content-Length" fs with
-  | Some v =>
-    match parse parseDec v with
-    | inl _
-    | inr (_, String _ _) => raise $ Some "Content-Length not a number."
-    | inr (n, "") => Some ∘ string_of_list_ascii <$> manyN (N.to_nat n) anyToken
-    end
+  match findField "Transfer-Encoding" fs with
+  | Some te =>
+    if fold (String ∘ tolower) "" (te : field_value) =? "chunked"
+    then Some <$> parseChunk
+    else raise $ Some $ "Unknown transfer encoding "
+               ++ to_string (te : field_value)
   | None =>
-    (* TODO: Transfer-Encoding *)
-    ret None
-  end.
+    match findField "Content-Length" fs with
+    | Some v =>
+      match parse parseDec v with
+      | inl _
+      | inr (_, String _ _) => raise $ Some "Content-Length not a number."
+      | inr (n, "") => Some ∘ string_of_list_ascii <$>
+                           manyN (N.to_nat n) anyToken
+      end
+    | None =>
+      ret None
+    end
+  end%string.
 
 (** https://httpwg.org/http-core/draft-ietf-httpbis-messaging-latest.html#rfc.section.2.1 *)
 Definition parseRequest : parser http_request :=

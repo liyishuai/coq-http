@@ -5,6 +5,6 @@ From HTTP Require Import
 
 Definition run_test : io_unit :=
   IO.unsafe_run
-    (ORandom.self_init tt;; run_test (multi_test (@test void http_smi))).
+    (ORandom.self_init tt;; run_test (@test void http_smi)).
 
 Separate Extraction run_test.

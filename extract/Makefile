@@ -23,7 +23,7 @@ stop:
 	fi
 
 SERVER?=ysli/apache
-PORT?=1080
+PORT?=80
 
 server: stop
 	if [ $$(which docker) ]; \
@@ -33,7 +33,7 @@ server: stop
 		     exit 1; \
 	fi
 
-test: server
+test: TestHttp.native
 	./TestHttp.native 2> client.log
 
 etag-test:
