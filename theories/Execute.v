@@ -24,9 +24,8 @@ Fixpoint findResponse (s : conn_state)
     end
   end.
 
-Definition findRequest (s : origin_state) :
+Definition findRequest (port : N) (s : origin_state) :
   IO (option (packetT id) * origin_state) :=
-  oh <- origin_host;;
   let '(fd, str, or, ss) := s in
     match parse parseRequest str with
     | inl (Some err) =>
@@ -36,14 +35,14 @@ Definition findRequest (s : origin_state) :
     | inr (r, str') =>
       prerr_endline ("==============RECEIVED=============="
                        ++ CRLF ++ request_to_string r);;
-      ret (Some (Packet None (Some $ inr oh) (inl r)),
+      ret (Some (Packet None (Some $ inr $ origin_host port) (inl r)),
            (fd, str', Some r, ss))
     end.
 
 Definition tester_state : Type := conn_state * origin_state.
 
 (* TODO: separate proxy from client *)
-Definition client_io : clientE ~> stateT tester_state IO :=
+Definition client_io (port : N) : clientE ~> stateT tester_state IO :=
   fun _ ce =>
     match ce with
     | Client__Recv oa =>
@@ -56,7 +55,7 @@ Definition client_io : clientE ~> stateT tester_state IO :=
                ret (op, (cs', os)) in
            match oa with
            | Some a =>
-             '(op, os1) <- execStateT (recv_bytes_origin a) os0 >>= findRequest;;
+             '(op, os1) <- execStateT (recv_bytes_origin a) os0 >>= findRequest port;;
              match op with
              | Some p =>
                (* prerr_endline ("Proxy received " ++ to_string p);; *)
@@ -148,11 +147,10 @@ Definition gen_etag (p : path) (s : server_state exp) (es : exp_state)
     end
   end.
 
-Definition random_request (s : server_state exp) (es : exp_state)
+Definition random_request (origin_port : N) (s : server_state exp) (es : exp_state)
   : IO http_request :=
   m <- io_or (ret Method__GET) (ret Method__PUT);;
   p <- gen_path s;;
-  origin_port <- getport;;
   a <- io_or (ret $ Authority None "localhost" (Some server_port))
             (ret $ Authority None "host.docker.internal" (Some origin_port));;
   let uri : absolute_uri :=
@@ -212,9 +210,10 @@ Definition gen_request' (p : path) (s : server_state exp)
            ret (Request l [Field "Host" $ "localhost:" ++ port] None : http_request))
   end.
 
-Definition gen_request (s : server_state exp) (es : exp_state) : IO http_request :=
+Definition gen_request (port : N) (s : server_state exp) (es : exp_state)
+  : IO http_request :=
   p <- gen_path s;;
-  io_or (gen_request' p s es) (random_request s es).
+  io_or (gen_request' p s es) (random_request port s es).
 
 Definition gen_response (ss : server_state exp) (es : exp_state)
            (a : authority) : stateT origin_state IO (http_response id) :=
@@ -222,14 +221,14 @@ Definition gen_response (ss : server_state exp) (es : exp_state)
     $ fun os =>
         ret (Response (status_line_of_code 403) [] None, os).
 
-Fixpoint execute' {R} (fuel : nat) (s : tester_state) (m : itree tE R)
+Fixpoint execute' {R} (fuel : nat) (port : N) (s : tester_state) (m : itree tE R)
   : IO (bool * tester_state) :=
   match fuel with
   | O => ret (true, s)
   | S fuel =>
     match observe m with
     | RetF _  => ret (true, s)
-    | TauF m' => execute' fuel s m'
+    | TauF m' => execute' fuel port s m'
     | VisF e k =>
       match e with
       | (Throw err|) => prerr_endline err;; ret (false, s)
@@ -238,7 +237,7 @@ Fixpoint execute' {R} (fuel : nat) (s : tester_state) (m : itree tE R)
         | Or =>
           fun k =>
             b <- ORandom.bool tt;;
-            execute' fuel s (k b)
+            execute' fuel port s (k b)
         end k
       | (||ge|) =>
         match ge in genE Y return (Y -> _) -> _ with
@@ -247,33 +246,37 @@ Fixpoint execute' {R} (fuel : nat) (s : tester_state) (m : itree tE R)
             match oh with
             | Some h =>
               '(p, os') <- runStateT (gen_response ss es h) (snd s);;
-              execute' fuel (fst s, os')
+              execute' fuel port (fst s, os')
                        (k $ Packet (Some $ inr h) None $ inr p)
             | None =>
               c <- io_or (ret $ S $ length (fst s))
                         (io_choose 1%nat (map fst (fst s)));;
-              p <- Packet (Some $ inl c) None ∘ inl <$> gen_request ss es;;
-              execute' fuel s (k p)
+              p <- Packet (Some $ inl c) None ∘ inl <$> gen_request port ss es;;
+              execute' fuel port s (k p)
             end
         end k
       | (|||le|) =>
         match le in logE Y return (Y -> _) -> _ with
         | Log str =>
           fun k => prerr_endline ("Tester: " ++ str);;
-                execute' fuel s (k tt)
+                execute' fuel port s (k tt)
         end k
-      | (||||ce) => '(r, s') <- runStateT (client_io _ ce) s;;
-                  execute' fuel s' (k r)
+      | (||||ce) => '(r, s') <- runStateT (client_io port _ ce) s;;
+                  execute' fuel port s' (k r)
       end
     end
   end.
 
 Definition execute {R} (m : itree tE R) : IO bool :=
-  sfd <- getport >>= create_sock;;
-  '(b, s) <- execute' bigNumber ([], (sfd, None, "", None, [])) m;;
-  let '(cs, os) := s in
+  '(port, sfd) <- create_sock;;
+  '(b, s) <- execute' bigNumber port ([], (sfd, None, "", None, [])) m;;
+  let '(cs, (sfd, ofd, _, _, _)) := s in
   fold_left (fun m fd => OUnix.close fd;; m) (map (fst ∘ snd) $ cs)
-            (OUnix.close sfd);;
+            (match ofd with
+             | Some fd => OUnix.close fd
+             | None => ret tt
+             end;;
+             OUnix.close sfd);;
   ret b.
 
 Definition test {R} : itree smE R -> IO bool :=

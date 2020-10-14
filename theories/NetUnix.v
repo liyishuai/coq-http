@@ -38,12 +38,41 @@ Definition getport : IO N :=
        | None => default
        end).
 
-Definition create_sock (port : N) : IO file_descr :=
+Definition try {a b} (f : IO a) (g : IO b) : IO (option a) :=
+  catch_error
+    (Some <$> f) $
+    fun e m _ =>
+      g;;
+      (* prerr_endline (ostring_app m $ *)
+      (*                            ostring_app " throws an exception: " $ *)
+      (*                            error_message e);; *)
+      ret None.
+
+Definition create_sock' (port : N) : IO (option file_descr) :=
   let iaddr : inet_addr := inet_addr_any in
-  fd <- socket PF_INET SOCK_STREAM int_zero;;
-  bind fd (ADDR_INET iaddr $ int_of_n port);;
-  listen fd 128;;
-  ret fd.
+  ofd <- try (socket PF_INET SOCK_STREAM int_zero) (ret tt);;
+  match ofd with
+  | Some fd =>
+    let f :=
+        bind fd (ADDR_INET iaddr $ int_of_n port);;
+        listen fd 128;;
+        ret fd in
+    try f $
+        (* prerr_endline ("Binding and listening to port " *)
+        (*                  ++ to_string port);; *)
+    close fd
+  | None => ret None
+  end.
+
+Definition create_sock : IO (N * file_descr) :=
+  getport >>=
+          IO.fix_io
+          (fun next p =>
+             ofd <- create_sock' p;;
+             match ofd with
+             | Some fd => ret (p, fd)
+             | None    => next (1 + p)
+             end).
 
 Definition accept_conn (sfd : file_descr) : IO file_descr :=
   fst <$> accept sfd.
@@ -92,9 +121,8 @@ Instance Serialize__conn : Serialize (file_descr * string) :=
 Definition origin_state : Type :=
   file_descr * option file_descr * string * option (http_request) * server_state id.
 
-Definition origin_host : IO authority :=
-  port <- getport;;
-  ret (Authority None "host.docker.internal" (Some port)).
+Definition origin_host (port : N) : authority :=
+  Authority None "host.docker.internal" (Some port).
 
 Definition recv_bytes_origin (a : authority) : stateT origin_state IO unit :=
   mkStateT
@@ -152,7 +180,6 @@ Definition send_response (fd : file_descr) (res : http_response id) : IO bool :=
   let str : string := response_to_string res in
   buf <- OBytes.of_string str;;
   let len : int := OBytes.length buf in
-  oh <- origin_host;;
   b <- IO.fix_io
     (fun send_rec o =>
        sent <- send fd buf o (len - o)%int [];;
@@ -160,8 +187,8 @@ Definition send_response (fd : file_descr) (res : http_response id) : IO bool :=
        then ret false
        else
          if o + sent =? len
-         then prerr_endline ("================SENT================"
-                               ++ to_string oh ++ CRLF ++ str);;
+         then prerr_endline ("================SENT================origin"
+                               ++ CRLF ++ str);;
               ret true
          else send_rec (o + sent))%int int_zero;;
   close fd;;
