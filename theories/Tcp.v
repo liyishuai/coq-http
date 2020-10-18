@@ -9,7 +9,32 @@ Open Scope sum_scope.
 
 Definition payloadT exp_ : Type := http_request + http_response exp_.
 
-Definition connT := option (clientT + authority).
+Variant connT :=
+  Conn__User      : clientT -> connT
+| Conn__Server
+| Conn__Proxy     : clientT -> connT
+| Conn__Authority : authority -> connT.
+
+Program Instance Decidable_eq__connT (x y : connT) : Decidable (x = y) := {
+  Decidable_witness :=
+    match x, y with
+    | Conn__Server     , Conn__Server => true
+    | Conn__User      x, Conn__User      y
+    | Conn__Proxy     x, Conn__Proxy     y
+    | Conn__Authority x, Conn__Authority y => x = y?
+    | _, _ => false
+    end }.
+Solve Obligations with split; intuition; discriminate.
+Next Obligation.
+  intuition.
+  - destruct x, y; f_equal; try apply Decidable_spec; intuition.
+  - subst.
+    destruct y; try apply Nat.eqb_eq; intuition.
+    destruct a.
+    destruct authority__userinfo, authority__port;
+      repeat (apply andb_true_iff; intuition);
+      try apply eqb_eq; try apply N.eqb_eq; reflexivity.
+Qed.
 
 Record packetT {exp_} :=
   Packet {
@@ -62,37 +87,41 @@ Definition tcp {E R} `{switchE -< E} `{nondetE -< E} : itree E R :=
      or input output) [].
 
 Variant netE : Type -> Type :=
-  Net__In  : server_state exp -> option authority -> netE (packetT exp)
+  Net__In  : server_state exp -> connT -> netE (packetT exp)
 | Net__Out : packetT exp -> netE unit.
 
 Class Is__nE E `{netE -< E} `{nondetE -< E} `{logE -< E} `{symE exp -< E}.
 Notation nE := (netE +' nondetE +' logE +' symE exp).
 Instance nE_Is__nE : Is__nE nE. Defined.
 
-Definition packet_to_app      {exp_} (p : packetT exp_) : bool :=
-  packet__dst p = None?.
-Definition packet_from_client {exp_} (p : packetT exp_) : bool :=
+Definition packet_to_server {exp_} (p : packetT exp_) : bool :=
+  match packet__dst p with
+  | Conn__Server | Conn__Proxy _ => true
+  | _ => false
+  end.
+Definition packet_from_user {exp_} (p : packetT exp_) : bool :=
   match packet__src p with
-  | Some (inl _) => true
+  | Conn__User _ => true
   | _            => false
   end.
-Definition packet_from_origin {exp_} (a0 : authority) (p : packetT exp_) : bool :=
-  match packet__src p with
-  | Some (inr a) => a0 = a?
+Definition packet_to_proxy {exp_} (c0 : clientT) (p : packetT exp_) : bool :=
+  match packet__dst p with
+  | Conn__Proxy c => c0 = c?
   | _            => false
   end.
 
 CoFixpoint compose' {E R} `{Is__nE E}
+           (conns : list (clientT * authority))
            (bfi bfo : list (@packetT exp))
            (net : itree (switchE +' nondetE) R)
            (app : itree smE R) : itree E R :=
   match observe net, observe app with
   | RetF r, _
   | _, RetF r => Ret r
-  | TauF net', _ => Tau (compose' bfi bfo net' app)
-  | _, TauF app' => Tau (compose' bfi bfo net  app')
+  | TauF net', _ => Tau (compose' conns bfi bfo net' app)
+  | _, TauF app' => Tau (compose' conns bfi bfo net  app')
   | VisF vn kn, VisF va ka =>
-    let step__net st oh :=
+    let step__net st c :=
         match vn with
         | (se|) =>
           match se in switchE Y return (Y -> _) -> _ with
@@ -100,26 +129,26 @@ CoFixpoint compose' {E R} `{Is__nE E}
             fun k =>
               match bfo with
               | [] =>
-                pkt <- embed Net__In st oh;;
-                Tau (compose' bfi []  (k pkt) app)
+                pkt <- embed Net__In st c;;
+                Tau (compose' conns bfi []  (k pkt) app)
               | pkt :: bo' =>
-                Tau (compose' bfi bo' (k pkt) app)
+                Tau (compose' conns bfi bo' (k pkt) app)
               end
           | Switch__Out pkt =>
             fun k =>
-              if packet_to_app pkt
-              then Tau (compose' (bfi ++ [pkt]) bfo (k tt) app)
+              if packet_to_server pkt
+              then Tau (compose' conns (bfi ++ [pkt]) bfo (k tt) app)
               else (* embed Log ("Network emitting packet to " *)
                    (*              ++ to_string (packet__dst pkt));; *)
                    embed Net__Out pkt;;
-                   Tau (compose' bfi bfo (k tt) app)
+                   Tau (compose' conns bfi bfo (k tt) app)
           end kn
         | (|ne) =>
           match ne in nondetE Y return (Y -> _) -> _ with
           | Or =>
             fun k =>
               b <- trigger Or;;
-              Tau (compose' bfi bfo (k b) app)
+              Tau (compose' conns bfi bfo (k b) app)
           end kn
         end in
     match va with
@@ -127,31 +156,34 @@ CoFixpoint compose' {E R} `{Is__nE E}
       match ae in appE _ Y return (Y -> _) -> _ with
       | App__Recv st =>
         fun k =>
-          match pick packet_from_client bfi with
-          | None => step__net st None
+          match pick packet_from_user bfi with
+          | None => step__net st Conn__Server
           | Some (pkt, bi') =>
             let 'Packet s _ p := pkt in
             match s, p with
-            | Some (inl c), inl r => Tau (compose' bi' bfo net (k (c, r)))
-            | _, _ => Tau (compose' bi' bfo net app) (* drop the packet *)
+            | Conn__User c, inl r => Tau (compose' conns bi' bfo net (k (c, r)))
+            | _, _ => Tau (compose' conns bi' bfo net app) (* drop the packet *)
             end
           end
       | App__Send c r =>
         fun k =>
-          Tau (compose' bfi (bfo ++ [Packet None (Some (inl c)) (inr r)])
+          Tau (compose' conns bfi (bfo ++ [Packet Conn__Server (Conn__User c) (inr r)])
                         net (k tt))
       | App__Forward h r =>
-        fun k => Tau (compose' bfi (bfo ++ [Packet None (Some (inr h)) (inl r)])
-                            net (k tt))
-      | App__Backward st h =>
         fun k =>
-          match pick (packet_from_origin h) bfi with
-          | None => step__net st (Some h)
+          let c := length conns in
+          Tau (compose' (put c h conns) bfi
+                        (bfo ++ [Packet (Conn__Proxy c) (Conn__Authority h) (inl r)])
+                        net (k c))
+      | App__Backward st c =>
+        fun k =>
+          match pick (packet_to_proxy c) bfi with
+          | None => step__net st (Conn__Proxy c)
           | Some (pkt, bi') =>
             match packet__payload pkt with
             | inr r =>
-              Tau (compose' bi' bfo net (k (unwrap_response r)))
-            | _ => Tau (compose' bi' bfo net app) (* drop the packet *)
+              Tau (compose' conns bi' bfo net (k (unwrap_response r)))
+            | _ => Tau (compose' conns bi' bfo net app) (* drop the packet *)
             end
           end
       end ka
@@ -160,25 +192,25 @@ CoFixpoint compose' {E R} `{Is__nE E}
       | Or =>
         fun k =>
           b <- trigger Or;;
-          Tau (compose' bfi bfo net (k b))
+          Tau (compose' conns bfi bfo net (k b))
       end ka
     | (||le|) =>
       match le in logE Y return (Y -> _) -> _ with
       | Log str =>
         fun k =>
           embed Log ("App: " ++ str);;
-          Tau (compose' bfi bfo net (k tt))
+          Tau (compose' conns bfi bfo net (k tt))
       end ka
     | (|||se) =>
       match se in symE _ Y return (Y -> _) -> _ with
       | Sym__New =>
         fun k =>
           x <- trigger Sym__New;;
-          Tau (compose' bfi bfo net (k x))
+          Tau (compose' conns bfi bfo net (k x))
       end ka
     end
   end%string.
 
 Definition compose_switch {E T} `{Is__nE E} :
   itree (switchE +' nondetE) T -> itree smE T -> itree E T :=
-  compose' [] [].
+  compose' [] [] [].

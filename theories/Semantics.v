@@ -80,8 +80,8 @@ Notation clientT := nat.
 Variant appE {exp_} : Type -> Type :=
   App__Recv : server_state exp_ -> appE (clientT * http_request)
 | App__Send : clientT -> http_response exp_ -> appE unit
-| App__Forward  : authority -> http_request -> appE unit
-| App__Backward : server_state exp_ -> authority -> appE (http_response id).
+| App__Forward  : authority -> http_request -> appE clientT
+| App__Backward : server_state exp_ -> clientT -> appE (http_response id).
 Arguments appE : clear implicits.
 
 Variant logE : Type -> Set :=
@@ -320,8 +320,7 @@ Definition forward_request : itree E (http_response id) :=
                            (RequestTarget__Origin p oq)
                            (Version 1 1))
               (updateField "Host" $ to_string a) om in
-  embed App__Forward a req;;
-  embed App__Backward st a.
+  embed App__Forward a req >>= embed App__Backward st.
 
 End Proxy.
 

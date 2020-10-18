@@ -20,32 +20,49 @@ Fixpoint findResponse (s : conn_state)
     | inr (r, str') =>
       prerr_endline ("==============RECEIVED=============="
                        ++ to_string c ++ CRLF ++ response_to_string r);;
-      ret (Some (Packet None (Some $ inl c) (inr r)), (c, (f, str')) :: t)
+      ret (Some (Packet Conn__Server (Conn__User c) (inr r)), (c, (f, str')) :: t)
     end
   end.
 
-Definition findRequest (port : N) (s : origin_state) :
-  IO (option (packetT id) * origin_state) :=
-  let '(fd, str, or, ss) := s in
-    match parse parseRequest str with
-    | inl (Some err) =>
-      failwith $ "Bad request " ++ to_string str ++
-               ", error message: " ++ err
-    | inl None => ret (None, s)
-    | inr (r, str') =>
-      prerr_endline ("==============RECEIVED=============="
-                       ++ CRLF ++ request_to_string r);;
-      ret (Some (Packet None (Some $ inr $ origin_host port) (inl r)),
-           (fd, str', Some r, ss))
+Fixpoint findRequest'
+         (conns : list (clientT *
+                        (OUnix.file_descr * string * option http_request)))
+  : IO (option (clientT * http_request) *
+        list (clientT * (OUnix.file_descr * string * option http_request)))
+  :=
+    match conns with
+    | [] => ret (None, [])
+    | conn :: t =>
+      let '(c, (fd, str, _)) := conn in
+      match parse parseRequest str with
+      | inl (Some err) =>
+        failwith $ "Bad request " ++ to_string str ++
+                 ", error message: " ++ err
+      | inl None => '(or, t') <- findRequest' t;;
+                   ret (or, conn :: t')
+      | inr (r, str') =>
+        prerr_endline ("==============RECEIVED==============origin"
+                         ++ CRLF ++ request_to_string r);;
+        ret (Some (c, r), (c, (fd, str', Some r)) :: t)
+      end
     end.
 
+Definition findRequest (s : origin_state) :
+  IO (option (clientT * http_request) * origin_state) :=
+  let '(sfd, port, conns, ss) := s in
+  '(or, conns') <- findRequest' conns;;
+  ret (or, (sfd, port, conns', ss)).
+
 Definition tester_state : Type := conn_state * origin_state.
+
+Definition originAuthority (port : N) : authority :=
+  Authority None "host.docker.internal" (Some port).
 
 (* TODO: separate proxy from client *)
 Definition client_io (port : N) : clientE ~> stateT tester_state IO :=
   fun _ ce =>
     match ce with
-    | Client__Recv oa =>
+    | Client__Recv src =>
       mkStateT
         (fun s0 =>
            let '(cs, os0) := s0 in
@@ -53,39 +70,40 @@ Definition client_io (port : N) : clientE ~> stateT tester_state IO :=
                '(op, cs') <- execStateT recv_bytes cs >>= findResponse;;
                (* prerr_endline ("Client received " ++ to_string op);; *)
                ret (op, (cs', os)) in
-           match oa with
-           | Some a =>
-             '(op, os1) <- execStateT (recv_bytes_origin a) os0 >>= findRequest port;;
-             match op with
-             | Some p =>
+           match src with
+           | Conn__Proxy _ =>
+             '(ocr, os1) <- execStateT recv_bytes_origin os0 >>= findRequest;;
+             match ocr with
+             | Some (c, r) =>
                (* prerr_endline ("Proxy received " ++ to_string p);; *)
-               ret (Some p, (cs, os1))
+               ret (Some (Packet (Conn__Authority $ originAuthority port)
+                                 (Conn__Proxy c) (inl r)), (cs, os1))
              | None => recv_client os1
              end
-           | None => recv_client os0
+           | _ => recv_client os0
            end)
     | Client__Send pkt =>
-      let 'Packet s _ p := pkt in
+      let 'Packet s d p := pkt in
       mkStateT
         $ fun s0 =>
             let '(cs, os) := s0 in
             match s, p with
-            | None, _ =>
+            | Conn__Server , _
+            | Conn__Proxy _, _ =>
               failwith "Tester cannot send from server"
-            | Some (inl _), inr _ =>
+            | Conn__User _, inr _ =>
               failwith "Unexpected sending response from client"
-            | Some (inr _), inl _ =>
+            | Conn__Authority _, inl _ =>
               failwith "Unexpected sending request from origin"
-            | Some (inl c), inl r =>
+            | Conn__User c, inl r =>
               cs' <- execStateT (send_request c r) cs;;
               ret (true, (cs', os))
-            | Some (inr a), inr r =>
-              let '(sfd, ofd, str, or, ss) := os in
-              b <- match ofd with
-                  | Some fd => send_response fd r
-                  | None    => ret false
-                  end;;
-              ret (b, (cs, (sfd, None, str, or, ss)))
+            | Conn__Authority a, inr r =>
+              match d with
+              | Conn__Proxy c => '(b, os') <- runStateT (send_response c r) os;;
+                              ret (b, (cs, os'))
+              | _ => ret (false, s0)
+              end
             end
     end.
 
@@ -216,7 +234,7 @@ Definition gen_request (port : N) (s : server_state exp) (es : exp_state)
   io_or (gen_request' p s es) (random_request port s es).
 
 Definition gen_response (ss : server_state exp) (es : exp_state)
-           (a : authority) : stateT origin_state IO (http_response id) :=
+           (c : clientT) : stateT origin_state IO (http_response id) :=
   mkStateT
     $ fun os =>
         ret (Response (status_line_of_code 403) [] None, os).
@@ -241,17 +259,18 @@ Fixpoint execute' {R} (fuel : nat) (port : N) (s : tester_state) (m : itree tE R
         end k
       | (||ge|) =>
         match ge in genE Y return (Y -> _) -> _ with
-        | Gen ss oh es =>
+        | Gen ss src es =>
           fun k =>
-            match oh with
-            | Some h =>
-              '(p, os') <- runStateT (gen_response ss es h) (snd s);;
+            match src with
+            | Conn__Proxy c =>
+              '(p, os') <- runStateT (gen_response ss es c) (snd s);;
               execute' fuel port (fst s, os')
-                       (k $ Packet (Some $ inr h) None $ inr p)
-            | None =>
+                       (k $ Packet (Conn__Authority $ originAuthority port) src
+                          $ inr p)
+            | _ =>
               c <- io_or (ret $ S $ length (fst s))
                         (io_choose 1%nat (map fst (fst s)));;
-              p <- Packet (Some $ inl c) None ∘ inl <$> gen_request port ss es;;
+              p <- Packet (Conn__User c) src ∘ inl <$> gen_request port ss es;;
               execute' fuel port s (k p)
             end
         end k
@@ -269,14 +288,11 @@ Fixpoint execute' {R} (fuel : nat) (port : N) (s : tester_state) (m : itree tE R
 
 Definition execute {R} (m : itree tE R) : IO bool :=
   '(port, sfd) <- create_sock;;
-  '(b, s) <- execute' bigNumber port ([], (sfd, None, "", None, [])) m;;
-  let '(cs, (sfd, ofd, _, _, _)) := s in
-  fold_left (fun m fd => OUnix.close fd;; m) (map (fst ∘ snd) $ cs)
-            (match ofd with
-             | Some fd => OUnix.close fd
-             | None => ret tt
-             end;;
-             OUnix.close sfd);;
+  '(b, s) <- execute' bigNumber port ([], (sfd, port, [], [])) m;;
+  let '(cs, (sfd, _, conns, _)) := s in
+  fold_left (fun m fd => OUnix.close fd;; m)
+            (map (fst ∘ snd) cs ++ map (fst ∘ fst ∘ snd) conns)
+            (OUnix.close sfd);;
   ret b.
 
 Definition test {R} : itree smE R -> IO bool :=

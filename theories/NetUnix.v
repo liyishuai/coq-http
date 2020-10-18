@@ -119,35 +119,48 @@ Instance Serialize__conn : Serialize (file_descr * string) :=
   to_sexp ∘ snd.
 
 Definition origin_state : Type :=
-  file_descr * option file_descr * string * option (http_request) * server_state id.
+  file_descr * N *
+  list (clientT *
+        (file_descr * string * option http_request)) *
+  server_state id.
 
 Definition origin_host (port : N) : authority :=
   Authority None "host.docker.internal" (Some port).
 
-Definition recv_bytes_origin (a : authority) : stateT origin_state IO unit :=
+Definition proxy_of_fd (fd : file_descr)
+  : list (clientT * (file_descr * string * option http_request)) ->
+    option (clientT * (file_descr * string * option http_request)) :=
+  find (file_descr_eqb fd ∘ fst ∘ fst ∘ snd).
+
+Definition recv_bytes_origin : stateT origin_state IO unit :=
   mkStateT
     $ fun s =>
-        let '(sfd, ofd, str, or, ss) := s in
-        fd <- match ofd with
-             | Some fd => ret fd
-             | None =>
-               accept_conn sfd
-             end;;
-        '(fds, _, _) <- select [fd] [] [] (OFloat.of_int 1);;
-        match fds with
-        | [] => ret (tt, s)
-        | [fd] =>
-          buf <- OBytes.create BUFFER_SIZE;;
-          len <- recv fd buf int_zero BUFFER_SIZE [];;
-          if (len <? int_zero)%int
-          then close fd;; ret (tt, s)
-          else if (len =? int_zero)%int
-               then ret (tt, s)
-               else str0 <- from_ostring <$> OBytes.to_string buf;;
-                    let str1 : string := substring 0 (nat_of_int len) str0 in
-                    ret (tt, (sfd, Some fd, str ++ str1, None, ss))
-        | _ :: _ :: _ => failwith "Selecting 1 connection but returned many"
-        end.
+        let '(sfd, port, conns, ss) := s in
+        '(fds, _, _) <- select (map (fst ∘ fst ∘ snd) conns) [] [] (OFloat.of_int 1);;
+        conns' <-
+        fold_left
+          (fun _s0 fd =>
+             s0 <- _s0;;
+             match proxy_of_fd fd s0 with
+             | Some (c, (fd, str0, or)) =>
+               buf <- OBytes.create BUFFER_SIZE;;
+               len <- recv fd buf int_zero BUFFER_SIZE [];;
+               if len <? int_zero
+               then close fd;; ret s0
+               else if len =? int_zero
+                    then _s0
+                    else str <- from_ostring <$> OBytes.to_string buf;;
+                         let str1 : string := substring 0 (nat_of_int len) str in
+                         ret $ update c (fd, str0 ++ str1, or) s0
+             | None => ret s0
+             end)%int fds
+          ('(fds, _, _) <- select [sfd] [] [] (OFloat.of_int 1);;
+           match fds with
+           | [] => ret conns
+           | sfd :: _ => fd <- accept_conn sfd;;
+                       ret (put (length conns) (fd, "", None) conns)
+           end);;
+        ret (tt, (sfd, port, conns', ss)).
 
 Definition send_request (c : clientT) (req : http_request) : stateT conn_state IO unit :=
   let send_bytes fd :=
@@ -176,20 +189,26 @@ Definition send_request (c : clientT) (req : http_request) : stateT conn_state I
                   ret (tt, s')
          end).
 
-Definition send_response (fd : file_descr) (res : http_response id) : IO bool :=
-  let str : string := response_to_string res in
-  buf <- OBytes.of_string str;;
-  let len : int := OBytes.length buf in
-  b <- IO.fix_io
-    (fun send_rec o =>
-       sent <- send fd buf o (len - o)%int [];;
-       if sent <? int_zero
-       then ret false
-       else
-         if o + sent =? len
-         then prerr_endline ("================SENT================origin"
-                               ++ CRLF ++ str);;
-              ret true
-         else send_rec (o + sent))%int int_zero;;
-  close fd;;
-  ret b.
+Definition send_response (c : clientT) (res : http_response id) : stateT origin_state IO bool :=
+  mkStateT
+    (fun s =>
+       let '(sfd, port, conns, ss) := s in
+       match get c conns with
+       | Some (fd, _, _) =>
+         let str : string := response_to_string res in
+         buf <- OBytes.of_string str;;
+         let len : int := OBytes.length buf in
+         b <- IO.fix_io
+               (fun send_rec o =>
+                  sent <- send fd buf o (len - o)%int [];;
+                  if sent <? int_zero
+                  then ret false
+                  else
+                    if o + sent =? len
+                    then prerr_endline ("================SENT================origin"
+                                          ++ CRLF ++ str);;
+                         ret true
+                    else send_rec (o + sent))%int int_zero;;
+         ret (b, s)
+       | None => ret (false, s)
+       end).

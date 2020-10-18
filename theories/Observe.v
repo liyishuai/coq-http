@@ -13,8 +13,8 @@ Definition wrap_packet (pkt : packetT id) : packetT exp :=
   Packet s d (wrap_payload p).
 
 Variant observeE : Type -> Type :=
-  Observe__ToServer : server_state exp -> option authority -> observeE (packetT id)
-| Observe__FromServer : option authority -> observeE (packetT id).
+  Observe__ToServer   : server_state exp -> connT -> observeE (packetT id)
+| Observe__FromServer : connT -> observeE (packetT id).
 
 Variant decideE : Type -> Set :=
   Decide : decideE bool.
@@ -39,6 +39,15 @@ Instance Serialize__payloadT : Serialize (payloadT id) :=
     | inr r => Atom $ response_to_string r
     end.
 
+Instance Serialize__connT : Serialize connT :=
+  fun c =>
+    match c with
+    | Conn__User      c => [Atom "User"; to_sexp c]
+    | Conn__Server      => [Atom "Server"]
+    | Conn__Proxy     c => [Atom "Proxy"; to_sexp c]
+    | Conn__Authority a => [Atom "Authority"; to_sexp a]
+    end%sexp.
+
 Instance Serialize__packetT : Serialize (packetT id) :=
   fun pkt =>
     let 'Packet s d p := pkt in
@@ -51,12 +60,7 @@ Definition dualize {E R} `{Is__oE E} (e : netE R) : itree E R :=
   match e in netE R return _ R with
   | Net__In st oh => wrap_packet <$> embed Observe__ToServer st oh
   | Net__Out (Packet s0 d0 p0) =>
-    pkt <- match d0 with
-                      | Some (inl _) => embed Observe__FromServer None
-                      | Some (inr a) =>
-                        embed Observe__FromServer (Some a)
-                      | None   => throw "Network loop in model"
-                      end;;
+    pkt <- embed Observe__FromServer s0;;
     let '(Packet s d p) := pkt in
     if (s = s0?) &&& (d = d0?)
     then match p0, p with

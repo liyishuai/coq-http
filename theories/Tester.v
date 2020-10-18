@@ -72,8 +72,8 @@ Definition unify {T} (e : exp T) (v : T) (s : exp_state) : string + exp_state :=
   end v s.
 
 Variant testerE : Type -> Type :=
-  Tester__Recv : option authority -> testerE (packetT id)
-| Tester__Send : server_state exp -> option authority ->
+  Tester__Recv : connT -> testerE (packetT id)
+| Tester__Send : server_state exp -> connT ->
                exp_state -> testerE (packetT id).
 
 Class Is__stE E `{failureE -< E} `{nondetE -< E}
@@ -141,8 +141,8 @@ Definition instantiate_observe {E A} `{Is__stE E} (e : observeE A)
     | Observe__ToServer st oh =>
       pkt <- embed Tester__Send st oh s;;
       Ret (s, pkt)
-    | Observe__FromServer  oa =>
-      pkt <- embed Tester__Recv oa;;
+    | Observe__FromServer src =>
+      pkt <- embed Tester__Recv src;;
       Ret (s, pkt)
     end.
 
@@ -183,10 +183,10 @@ Definition match_observe {T R} (e : testerE T) (r : T) (l : list (itree stE R))
   : list (itree stE R) := map (match_event e r) l.
 
 Variant genE : Type -> Type :=
-  Gen : server_state exp -> option authority -> exp_state -> genE (packetT id).
+  Gen : server_state exp -> connT -> exp_state -> genE (packetT id).
 
 Variant clientE : Type -> Type :=
-| Client__Recv : option authority -> clientE (option (packetT id))
+| Client__Recv : connT -> clientE (option (packetT id))
 | Client__Send : packetT id -> clientE bool.
 
 Class Is__tE E `{failureE -< E} `{nondetE -< E}
@@ -233,18 +233,18 @@ CoFixpoint backtrack' {E R} `{Is__tE E} (others : list (itree stE R))
               then Tau (backtrack' (match_observe (Tester__Send st oh es)
                                                   pkt others) (k pkt))
               else catch "Not ready to send"
-      | Tester__Recv oa =>
-        fun k => opkt <- embed Client__Recv oa;;
+      | Tester__Recv src =>
+        fun k => opkt <- embed Client__Recv src;;
               match opkt with
               | Some pkt =>
-                Tau (backtrack' (match_observe (Tester__Recv oa) pkt others) (k pkt))
+                Tau (backtrack' (match_observe (Tester__Recv src) pkt others) (k pkt))
               | None =>
                 match others with
                 | [] =>
-                  embed Log ("No more choices, retry receiving from " ++ to_string oa);;
+                  embed Log ("No more choices, retry receiving");;
                   Tau (backtrack' [] m)
                 | other :: others' =>
-                  embed Log ("Postpone receiving from " ++ to_string oa);;
+                  embed Log ("Postpone receiving");;
                   Tau (backtrack' (others' ++ [m]) other)
                 end
               end
