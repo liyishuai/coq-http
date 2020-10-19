@@ -205,7 +205,7 @@ Definition gen_request' (p : path) (s : server_state exp)
         RequestLine Method__PUT (RequestTarget__Origin p None) (Version 1 1) in
     let str1 : string := p ++ ": " ++ str0 in
     ret (Request
-           l [Field "Host" $ "localhost:" ++ to_string port;
+           l [Field "Host" $ "localhost:" ++ port;
              Field "Content-Length" (to_string $ String.length str1);
              Field "If-Match" (t : field_value)]
            (Some str1) : http_request)

@@ -158,10 +158,11 @@ Definition instantiate_observe {E A} `{Is__stE E} (e : observeE A)
       | Conn__Proxy c =>
         match get c ps with
         | Some c' => Ret (s, Packet src (Conn__Proxy c') pld)
-        | None => ITree.forever
-                   $ embed Log $
-                   "Model proxy shouldn't receive response from " ++ to_string c
-                   ++ " before forwarding any message to it."
+        | None => throw
+                   $ "Model proxy shouldn't receive response from "
+                   ++ to_string c
+                   ++ " before forwarding any message to it. Proxy mapping: "
+                   ++ to_string ps
         end
       | _ => Ret (s, Packet src dst pld)
       end

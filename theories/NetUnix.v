@@ -96,7 +96,7 @@ Notation BUFFER_SIZE := 1024.
 Definition recv_bytes : stateT conn_state IO unit :=
   mkStateT
     (fun s =>
-       '(fds, _, _) <- select (map (fst ∘ snd) s) [] [] (OFloat.of_int 1);;
+       '(fds, _, _) <- select (map (fst ∘ snd) s) [] [] (OFloat.of_int 0);;
        s' <- fold_left
               (fun _s0 fd =>
                  s0 <- _s0;;
@@ -136,7 +136,7 @@ Definition recv_bytes_origin : stateT origin_state IO unit :=
   mkStateT
     $ fun s =>
         let '(sfd, port, conns, ss) := s in
-        '(fds, _, _) <- select (map (fst ∘ fst ∘ snd) conns) [] [] (OFloat.of_int 1);;
+        '(fds, _, _) <- select (map (fst ∘ fst ∘ snd) conns) [] [] (OFloat.of_int 0);;
         conns' <-
         fold_left
           (fun _s0 fd =>
@@ -154,7 +154,7 @@ Definition recv_bytes_origin : stateT origin_state IO unit :=
                          ret $ update c (fd, str0 ++ str1, or) s0
              | None => ret s0
              end)%int fds
-          ('(fds, _, _) <- select [sfd] [] [] (OFloat.of_int 1);;
+          ('(fds, _, _) <- select [sfd] [] [] (OFloat.of_int 0);;
            match fds with
            | [] => ret conns
            | sfd :: _ => fd <- accept_conn sfd;;
