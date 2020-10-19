@@ -76,8 +76,9 @@ Definition client_io (port : N) : clientE ~> stateT tester_state IO :=
              match ocr with
              | Some (c, r) =>
                (* prerr_endline ("Proxy received " ++ to_string p);; *)
-               ret (Some (Packet (Conn__Authority $ originAuthority port)
-                                 (Conn__Proxy c) (inl r)), (cs, os1))
+               ret (Some (Packet (Conn__Proxy c)
+                                 (Conn__Authority $ originAuthority port)
+                                 (inl r)), (cs, os1))
              | None => recv_client os1
              end
            | _ => recv_client os0

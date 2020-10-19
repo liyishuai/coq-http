@@ -71,6 +71,8 @@ Definition unify {T} (e : exp T) (v : T) (s : exp_state) : string + exp_state :=
   | Exp__Match _ _ _ => fun v _ => err v
   end v s.
 
+Definition unify_state : Set := exp_state * list (clientT * clientT).
+
 Variant testerE : Type -> Type :=
   Tester__Recv : connT -> testerE (packetT id)
 | Tester__Send : server_state exp -> connT ->
@@ -82,15 +84,16 @@ Notation stE := (failureE +' nondetE +' decideE +' logE +' testerE).
 Instance stE_Is__stE : Is__stE stE. Defined.
 
 Definition instantiate_unify {E A} `{Is__stE E} (e : unifyE A)
-  : Monads.stateT exp_state (itree E) A :=
+  : Monads.stateT unify_state (itree E) A :=
   fun s =>
+    let (xs, ps) := s in
     match e with
     | Unify__FreshBody =>
-      let '(x, bs, fs) := fresh_body s in
-      Ret ((x, bs, fs), Exp__Body x)
+      let '(x, bs, fs) := fresh_body xs in
+      Ret ((x, bs, fs, ps), Exp__Body x)
     | Unify__FreshETag =>
-      let (s', x) := fresh_etag s in
-      Ret (s', Exp__ETag x)
+      let (s', x) := fresh_etag xs in
+      Ret (s', ps, Exp__ETag x)
     | Unify__Response rx r =>
       let 'Response (Status _ cx _ as stx) fx obx := rx in
       let 'Response (Status _ c  _ as st ) fs ob  := r  in
@@ -108,18 +111,18 @@ Definition instantiate_unify {E A} `{Is__stE E} (e : unifyE A)
               end
             | inl err => inl err
             end in
-        let os1 : string + exp_state := fold_left unify_field fx (inr s) in
+        let os1 : string + exp_state := fold_left unify_field fx (inr xs) in
         match os1 with
         | inr s1 =>
           match obx, ob with
           | Some bx, Some b =>
             match unify bx b s1 with
-            | inr s2  => Ret (s2, tt)
+            | inr s2  => Ret (s2, ps, tt)
             | inl err => throw $ "Unify message failed: " ++ err
             end
           | Some _, None => throw "Expect message body, but not found."
           | None, Some _ => throw "Expect no message body, but observed it."
-          | None, None   => Ret (s1, tt)
+          | None, None   => Ret (s1, ps, tt)
           end
         | inl err => throw $ "Unify field failed: " ++ err
         end
@@ -128,19 +131,40 @@ Definition instantiate_unify {E A} `{Is__stE E} (e : unifyE A)
                  ++ ", under state " ++ to_string s
     | Unify__Match bx b =>
       (* embed Log ("Unifying " ++ to_string bx ++ " against " ++ to_string b);; *)
-      match unify bx b s with
-      | inr s1  => Ret (s1, tt)
+      match unify bx b xs with
+      | inr s1  => Ret (s1, ps, tt)
       | inl err => throw $ "Unify If-Match failed: " ++ err
+      end
+    | Unify__Proxy cx c0 =>
+      match get cx ps with
+      | Some c1 =>
+        if (c0 =? c1)%nat
+        then Ret (s, tt)
+        else throw $ "Expect model connection " ++ to_string cx
+                   ++ " corresponds to " ++ to_string c0
+                   ++ ", but observed " ++ to_string c1
+      | None => Ret (xs, (cx, c0) :: ps, tt)
       end
     end.
 
 Definition instantiate_observe {E A} `{Is__stE E} (e : observeE A)
-  : Monads.stateT exp_state (itree E) A :=
+  : Monads.stateT unify_state (itree E) A :=
   fun s =>
+    let (xs, ps) := s in
     match e with
     | Observe__ToServer st oh =>
-      pkt <- embed Tester__Send st oh s;;
-      Ret (s, pkt)
+      '(Packet src dst pld) <- embed Tester__Send st oh xs;;
+      match dst with
+      | Conn__Proxy c =>
+        match get c ps with
+        | Some c' => Ret (s, Packet src (Conn__Proxy c') pld)
+        | None => ITree.forever
+                   $ embed Log $
+                   "Model proxy shouldn't receive response from " ++ to_string c
+                   ++ " before forwarding any message to it."
+        end
+      | _ => Ret (s, Packet src dst pld)
+      end
     | Observe__FromServer src =>
       pkt <- embed Tester__Recv src;;
       Ret (s, pkt)
@@ -151,7 +175,7 @@ Definition liftState {S A} {F : Type -> Type} `{Functor F} (aF : F A)
   fun s : S => pair s <$> aF.
 
 Definition unifier {E R} `{Is__stE E} (m : itree oE R)
-  : Monads.stateT exp_state (itree E) R :=
+  : Monads.stateT unify_state (itree E) R :=
   interp (fun _ e =>
             match e with
             | (|||ue|)  => instantiate_unify   ue
@@ -159,7 +183,7 @@ Definition unifier {E R} `{Is__stE E} (m : itree oE R)
             | (e|)
             | (|e|)
             | (||e|)
-            | (||||e|) => @liftState exp_state _ (itree _) _ (trigger e)
+            | (||||e|) => @liftState unify_state _ (itree _) _ (trigger e)
             end) m.
 
 CoFixpoint match_event {T R} (e0 : testerE R) (r : R) (m : itree stE T)
@@ -256,4 +280,4 @@ Definition backtrack {E R} `{Is__tE E} : itree stE R -> itree E R :=
   backtrack' [].
 
 Definition tester {E R} `{Is__tE E} (mo : itree oE R) :=
-  backtrack $ snd <$> unifier mo (0, [], []).
+  backtrack $ snd <$> unifier mo (0, [], [], []).

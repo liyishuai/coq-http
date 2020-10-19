@@ -23,6 +23,7 @@ Variant unifyE : Type -> Type :=
   Unify__FreshBody : unifyE (exp message_body)
 | Unify__FreshETag : unifyE (exp field_value)
 | Unify__Match     : exp bool -> bool -> unifyE unit
+| Unify__Proxy     : clientT -> clientT -> unifyE unit
 | Unify__Response  : http_response exp -> http_response id -> unifyE unit.
 
 Notation failureE := (exceptE string).
@@ -62,7 +63,15 @@ Definition dualize {E R} `{Is__oE E} (e : netE R) : itree E R :=
   | Net__Out (Packet s0 d0 p0) =>
     pkt <- embed Observe__FromServer s0;;
     let '(Packet s d p) := pkt in
-    if (s = s0?) &&& (d = d0?)
+    match s0, s with
+    | Conn__Proxy c0, Conn__Proxy c => embed Unify__Proxy c0 c
+    | _, _ =>
+      if s = s0?
+      then ret tt
+      else throw $ "Expect source " ++ to_string s0
+                 ++ ", but observed " ++ to_string s
+    end;;
+    if d = d0?
     then match p0, p with
          | inl _, inr _ => throw "Expect request but observed response"
          | inr _, inl _ => throw "Expect response but observed request"
@@ -96,7 +105,8 @@ Definition dualize {E R} `{Is__oE E} (e : netE R) : itree E R :=
            end
          | inr r0, inr r => embed Unify__Response r0 r
          end
-    else throw "Unexpected payload observed to client"
+    else throw $ "Expect destination " ++ to_string d0
+               ++ ", but observed " ++ to_string d
   end%string.
 
 Definition observer {E R} `{Is__oE E} (m : itree nE R) : itree E R :=
