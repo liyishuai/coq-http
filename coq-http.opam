@@ -5,7 +5,7 @@ version: "dev"
 homepage: "https://github.com/liyishuai/coq-http"
 dev-repo: "git+https://github.com/liyishuai/coq-http.git"
 bug-reports: "https://github.com/liyishuai/coq-http/issues"
-license: "AGPL-3.0-or-later"
+license: "MPL-2.0"
 
 synopsis: "HTTP in Coq"
 description: """

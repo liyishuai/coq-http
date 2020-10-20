@@ -19,8 +19,8 @@ authors:
   - name: Benjamin C. Pierce
     email: bcpierce@cis.upenn.edu
 license:
-  - fullname: GNU Affero General Public License v3.0 or later
-    identifier: AGPL-3.0-or-later
+  - fullname: Mozilla Public License 2.0
+    identifier: MPL-2.0
 dependencies:
   - description: '[OCamlbuild](https://github.com/ocaml/ocamlbuild)'
     opam:
