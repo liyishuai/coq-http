@@ -18,7 +18,7 @@ HTTP specification in Coq, testable and verifiable
   - Yao Li
   - Azzam Althagafi
   - Benjamin C. Pierce
-- License: [GNU Affero General Public License v3.0 or later](LICENSE)
+- License: [Mozilla Public License 2.0](LICENSE)
 - Compatible Coq versions: 8.12 or later
 - Additional dependencies:
   - [OCamlbuild](https://github.com/ocaml/ocamlbuild)
