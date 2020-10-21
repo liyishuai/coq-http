@@ -92,7 +92,7 @@ Definition create_conn (c : clientT) : stateT conn_state IO file_descr :=
        ret (fd, (c, (fd, "")) :: s)).
 
 Notation BUFFER_SIZE := 1024.
-Definition SELECT_TIMEOUT := OFloat.Unsafe.of_string "0.2".
+Definition SELECT_TIMEOUT := OFloat.Unsafe.of_string "0".
 
 Definition recv_bytes : stateT conn_state IO unit :=
   mkStateT

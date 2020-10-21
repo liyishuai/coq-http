@@ -112,7 +112,7 @@ Definition dualize {E R} `{Is__oE E} (e : netE R) : itree E R :=
                ++ ", but observed " ++ to_string d
   end%string.
 
-Definition observer {E R} `{Is__oE E} (m : itree nE R) : itree E R :=
+Definition observer' {E R} `{Is__oE E} (m : itree nE R) : itree E R :=
   interp
     (fun _ e =>
        match e with
@@ -134,3 +134,50 @@ Definition observer {E R} `{Is__oE E} (m : itree nE R) : itree E R :=
                          ret b
          end
        end) m.
+
+Variant traceT :=
+  Trace__In  : packetT id -> traceT
+| Trace__Out : packetT id -> traceT.
+
+Instance Serialize__traceT : Serialize traceT :=
+  fun t =>
+    match t with
+    | Trace__In  p => [Atom "In ";  to_sexp p]
+    | Trace__Out p => [Atom "Out"; to_sexp p]
+    end%sexp.
+
+Definition list_to_string {A} `{Serialize A} (l : list A) : string :=
+  String.concat CRLF (map to_string l).
+
+Definition liftState {S A} {F : Type -> Type} `{Functor F} (aF : F A)
+  : Monads.stateT S F A :=
+  fun s : S => pair s <$> aF.
+
+Definition logger {E R} `{Is__oE E} (m : itree oE R)
+  : Monads.stateT (list traceT) (itree E) R :=
+  interp
+    (fun _ e =>
+       match e with
+       | (Throw err|) =>
+         fun s =>
+           embed Log ("Failing trace: " ++ CRLF ++ list_to_string (rev' s));;
+           throw err
+       | (|||||e) =>
+         match e in observeE Y return Monads.stateT _ _ Y with
+         | Observe__ToServer ss c =>
+           fun s =>
+             pkt <- embed Observe__ToServer ss c;;
+             ret (Trace__In  pkt::s, pkt)
+         | Observe__FromServer c =>
+           fun s =>
+             pkt <- embed Observe__FromServer c;;
+             ret (Trace__Out pkt::s, pkt)
+         end
+       | (|e|)
+       | (||e|)
+       | (|||e|)
+       | (||||e|) => @liftState (list traceT) _ (itree _) _ (trigger e)
+       end%string) m.
+
+Definition observer {E R} `{Is__oE E} (m : itree nE R) : itree E R :=
+  snd <$> logger (observer' m) [].
