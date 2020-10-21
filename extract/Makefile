@@ -22,7 +22,7 @@ stop:
 		then docker rm -f server; \
 	fi
 
-SERVER?=ysli/apache
+SERVER?=ysli/apache:proxy
 PORT?=80
 
 server: stop

@@ -36,8 +36,8 @@ Instance oE_Is__oE : Is__oE oE. Defined.
 Instance Serialize__payloadT : Serialize (payloadT id) :=
   fun p =>
     match p with
-    | inl r => Atom $ request_to_string  r
-    | inr r => Atom $ response_to_string r
+    | inl (Request  line   _ _) => Atom $ line_to_string   line
+    | inr (Response status _ _) => Atom $ status_to_string status
     end.
 
 Instance Serialize__connT : Serialize connT :=
@@ -59,12 +59,15 @@ Instance Serialize__packetT : Serialize (packetT id) :=
 (* TODO: distinguish proxy from clients *)
 Definition dualize {E R} `{Is__oE E} (e : netE R) : itree E R :=
   match e in netE R return _ R with
-  | Net__In st oh => wrap_packet <$> embed Observe__ToServer st oh
+  | Net__In st c => wrap_packet <$> embed Observe__ToServer st c
   | Net__Out (Packet s0 d0 p0) =>
     pkt <- embed Observe__FromServer s0;;
     let '(Packet s d p) := pkt in
     match s0, s with
-    | Conn__Proxy c0, Conn__Proxy c => embed Unify__Proxy c0 c
+    | Conn__Proxy c0, Conn__Proxy c =>
+      embed Unify__Proxy c0 c;;
+      embed Log ("Unification complete: "
+                   ++ to_string c0 ++ " -> " ++ to_string c)
     | _, _ =>
       if s = s0?
       then ret tt

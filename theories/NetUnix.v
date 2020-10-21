@@ -92,11 +92,12 @@ Definition create_conn (c : clientT) : stateT conn_state IO file_descr :=
        ret (fd, (c, (fd, "")) :: s)).
 
 Notation BUFFER_SIZE := 1024.
+Definition SELECT_TIMEOUT := OFloat.Unsafe.of_string "0.2".
 
 Definition recv_bytes : stateT conn_state IO unit :=
   mkStateT
     (fun s =>
-       '(fds, _, _) <- select (map (fst ∘ snd) s) [] [] (OFloat.of_int 0);;
+       '(fds, _, _) <- select (map (fst ∘ snd) s) [] [] SELECT_TIMEOUT;;
        s' <- fold_left
               (fun _s0 fd =>
                  s0 <- _s0;;
@@ -136,7 +137,7 @@ Definition recv_bytes_origin : stateT origin_state IO unit :=
   mkStateT
     $ fun s =>
         let '(sfd, port, conns, ss) := s in
-        '(fds, _, _) <- select (map (fst ∘ fst ∘ snd) conns) [] [] (OFloat.of_int 0);;
+        '(fds, _, _) <- select (map (fst ∘ fst ∘ snd) conns) [] [] SELECT_TIMEOUT;;
         conns' <-
         fold_left
           (fun _s0 fd =>
@@ -154,7 +155,7 @@ Definition recv_bytes_origin : stateT origin_state IO unit :=
                          ret $ update c (fd, str0 ++ str1, or) s0
              | None => ret s0
              end)%int fds
-          ('(fds, _, _) <- select [sfd] [] [] (OFloat.of_int 0);;
+          ('(fds, _, _) <- select [sfd] [] [] SELECT_TIMEOUT;;
            match fds with
            | [] => ret conns
            | sfd :: _ => fd <- accept_conn sfd;;

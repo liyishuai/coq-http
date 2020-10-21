@@ -152,20 +152,22 @@ Definition instantiate_observe {E A} `{Is__stE E} (e : observeE A)
   fun s =>
     let (xs, ps) := s in
     match e with
-    | Observe__ToServer st oh =>
-      '(Packet src dst pld) <- embed Tester__Send st oh xs;;
-      match dst with
-      | Conn__Proxy c =>
-        match get c ps with
-        | Some c' => Ret (s, Packet src (Conn__Proxy c') pld)
-        | None => throw
-                   $ "Model proxy shouldn't receive response from "
-                   ++ to_string c
-                   ++ " before forwarding any message to it. Proxy mapping: "
-                   ++ to_string ps
-        end
-      | _ => Ret (s, Packet src dst pld)
-      end
+    | Observe__ToServer st dst0 =>
+      dst <- match dst0 with
+            | Conn__Proxy c0 =>
+              match get c0 ps with
+              | Some c => ret $ Conn__Proxy c
+              | None =>
+                throw
+                  $ "Model proxy shouldn't receive response from "
+                  ++ to_string c0
+                  ++ " before forwarding any message to it. Proxy mapping: "
+                  ++ to_string ps
+              end
+            | _ => ret dst0
+            end;;
+      pkt <- embed Tester__Send st dst xs;;
+      Ret (s, pkt)
     | Observe__FromServer src =>
       pkt <- embed Tester__Recv src;;
       Ret (s, pkt)
@@ -186,6 +188,45 @@ Definition unifier {E R} `{Is__stE E} (m : itree oE R)
             | (||e|)
             | (||||e|) => @liftState unify_state _ (itree _) _ (trigger e)
             end) m.
+
+Variant traceT :=
+  Trace__In  : packetT id -> traceT
+| Trace__Out : packetT id -> traceT.
+
+Instance Serialize__traceT : Serialize traceT :=
+  fun t =>
+    match t with
+    | Trace__In  p => [Atom "In";  to_sexp p]
+    | Trace__Out p => [Atom "Out"; to_sexp p]
+    end%sexp.
+
+Definition list_to_string {A} `{Serialize A} (l : list A) : string :=
+  String.concat CRLF (map to_string l).
+
+Definition logger {E R} `{Is__stE E} (m : itree stE R)
+  : Monads.stateT (list traceT) (itree E) R :=
+  interp
+    (fun _ e =>
+       match e with
+       | (Throw err|) =>
+         fun s =>
+           embed Log ("Failing trace: " ++ CRLF ++ list_to_string (rev' s));;
+           throw err
+       | (||||e) =>
+         match e in testerE Y return Monads.stateT _ _ Y with
+         | Tester__Recv c =>
+           fun s =>
+             pkt <- embed Tester__Recv c;;
+             ret (Trace__In pkt::s, pkt)
+         | Tester__Send ss c es =>
+           fun s =>
+             pkt <- embed Tester__Send ss c es;;
+             ret (Trace__Out pkt::s, pkt)
+         end
+       | (|e|)
+       | (||e|)
+       | (|||e|) => @liftState (list traceT) _ (itree _) _ (trigger e)
+       end) m.
 
 CoFixpoint match_event {T R} (e0 : testerE R) (r : R) (m : itree stE T)
   : itree stE T :=
@@ -281,4 +322,4 @@ Definition backtrack {E R} `{Is__tE E} : itree stE R -> itree E R :=
   backtrack' [].
 
 Definition tester {E R} `{Is__tE E} (mo : itree oE R) :=
-  backtrack $ snd <$> unifier mo (0, [], [], []).
+  backtrack $ logger (unifier mo (0, [], [], [])) [].
