@@ -3,6 +3,7 @@ From ITree Require Export
 From HTTP Require Export
      Printer
      Instances
+     Trace
      Tcp.
 
 Definition wrap_payload : payloadT id -> payloadT exp :=
@@ -32,29 +33,6 @@ Class Is__oE E `{failureE -< E} `{nondetE -< E}
       `{decideE -< E} `{unifyE -< E} `{logE -< E} `{observeE -< E}.
 Notation oE := (failureE +' nondetE +' decideE +' unifyE +' logE +' observeE).
 Instance oE_Is__oE : Is__oE oE. Defined.
-
-Instance Serialize__payloadT : Serialize (payloadT id) :=
-  fun p =>
-    match p with
-    | inl (Request  line   _ _) => Atom $ line_to_string   line
-    | inr (Response status _ _) => Atom $ status_to_string status
-    end.
-
-Instance Serialize__connT : Serialize connT :=
-  fun c =>
-    match c with
-    | Conn__User      c => [Atom "User"; to_sexp c]
-    | Conn__Server      => [Atom "Server"]
-    | Conn__Proxy     c => [Atom "Proxy"; to_sexp c]
-    | Conn__Authority a => [Atom "Authority"; to_sexp a]
-    end%sexp.
-
-Instance Serialize__packetT : Serialize (packetT id) :=
-  fun pkt =>
-    let 'Packet s d p := pkt in
-    [[Atom "Src"; to_sexp s];
-    [Atom "Dst"; to_sexp d];
-    [Atom "Msg"; to_sexp p]]%sexp.
 
 (* TODO: distinguish proxy from clients *)
 Definition dualize {E R} `{Is__oE E} (e : netE R) : itree E R :=
@@ -134,17 +112,6 @@ Definition observer' {E R} `{Is__oE E} (m : itree nE R) : itree E R :=
                          ret b
          end
        end) m.
-
-Variant traceT :=
-  Trace__In  : packetT id -> traceT
-| Trace__Out : packetT id -> traceT.
-
-Instance Serialize__traceT : Serialize traceT :=
-  fun t =>
-    match t with
-    | Trace__In  p => [Atom "In ";  to_sexp p]
-    | Trace__Out p => [Atom "Out"; to_sexp p]
-    end%sexp.
 
 Definition list_to_string {A} `{Serialize A} (l : list A) : string :=
   String.concat CRLF (map to_string l).

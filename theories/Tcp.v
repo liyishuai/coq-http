@@ -45,6 +45,29 @@ Record packetT {exp_} :=
 Arguments packetT : clear implicits.
 Arguments Packet {_}.
 
+Instance Serialize__payloadT : Serialize (payloadT id) :=
+  fun p =>
+    match p with
+    | inl (Request  line   _ _) => Atom $ line_to_string   line
+    | inr (Response status _ _) => Atom $ status_to_string status
+    end.
+
+Instance Serialize__connT : Serialize connT :=
+  fun c =>
+    match c with
+    | Conn__User      c => [Atom "User"; to_sexp c]
+    | Conn__Server      => [Atom "Server"]
+    | Conn__Proxy     c => [Atom "Proxy"; to_sexp c]
+    | Conn__Authority a => [Atom "Authority"; to_sexp a]
+    end%sexp.
+
+Instance Serialize__packetT : Serialize (packetT id) :=
+  fun pkt =>
+    let 'Packet s d p := pkt in
+    [[Atom "Src"; to_sexp s];
+    [Atom "Dst"; to_sexp d];
+    [Atom "Msg"; to_sexp p]]%sexp.
+
 Variant switchE : Type -> Type :=
   Switch__In  : switchE (packetT exp)
 | Switch__Out : packetT exp -> switchE unit.

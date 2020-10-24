@@ -83,13 +83,17 @@ Definition conn_of_fd (fd : file_descr)
   : conn_state -> option (clientT * (file_descr * string)) :=
   find (file_descr_eqb fd ∘ fst ∘ snd).
 
-Definition create_conn (c : clientT) : stateT conn_state IO file_descr :=
+Definition create_conn (c : clientT) : stateT conn_state IO (option file_descr) :=
   mkStateT
     (fun s =>
        let iaddr : inet_addr := inet_addr_loopback in
-       fd <- socket PF_INET SOCK_STREAM int_zero;;
-       connect fd (ADDR_INET iaddr server_port);;
-       ret (fd, (c, (fd, "")) :: s)).
+       ofd <- try (fd <- socket PF_INET SOCK_STREAM int_zero;;
+                  connect fd (ADDR_INET iaddr server_port);;
+                  ret fd) (ret tt);;
+       ret (ofd, match ofd with
+                 | Some fd => (c, (fd, ""))::s
+                 | None    => s
+                 end)).
 
 Notation BUFFER_SIZE := 1024.
 Definition SELECT_TIMEOUT := OFloat.Unsafe.of_string "0".
@@ -163,31 +167,35 @@ Definition recv_bytes_origin : stateT origin_state IO unit :=
            end);;
         ret (tt, (sfd, port, conns', ss)).
 
-Definition send_request (c : clientT) (req : http_request) : stateT conn_state IO unit :=
-  let send_bytes fd :=
+Definition send_request (c : clientT) (req : http_request) : stateT conn_state IO bool :=
+  let send_bytes fd s :=
         let str : string := request_to_string req in
         buf <- OBytes.of_string str;;
         let len : int := OBytes.length buf in
-        IO.fix_io
+        b <- IO.fix_io
           (fun send_rec o =>
              sent <- send fd buf o (len - o)%int [];;
              if sent <? int_zero
-             then close fd;; failwith "Send byte failed"
+             then close fd;;
+                  prerr_endline "Send byte failed";;
+                  ret false
              else
                if o + sent =? len
-               then ret tt
+               then prerr_endline ("================SENT================"
+                                     ++ to_string c ++ CRLF ++ str);;
+                    ret true
                else send_rec (o + sent))%int int_zero;;
-        prerr_endline ("================SENT================"
-                         ++ to_string c ++ CRLF ++ str)
+        ret (b, s)
   in
   mkStateT
     (fun s =>
          match get c s with
-         | Some (fd, _) => send_bytes fd;;
-                          ret (tt, s)
-         | None => '(fd, s') <- runStateT (create_conn c) s;;
-                  send_bytes fd;;
-                  ret (tt, s')
+         | Some (fd, _) => send_bytes fd s
+         | None => '(ofd, s') <- runStateT (create_conn c) s;;
+                  match ofd with
+                  | Some fd => send_bytes fd s'
+                  | None    => ret (false, s')
+                  end
          end).
 
 Definition send_response (c : clientT) (res : http_response id) : stateT origin_state IO bool :=

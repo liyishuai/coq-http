@@ -58,56 +58,6 @@ Definition tester_state : Type := conn_state * origin_state.
 Definition originAuthority (port : N) : authority :=
   Authority None "host.docker.internal" (Some port).
 
-(* TODO: separate proxy from client *)
-Definition client_io (port : N) : clientE ~> stateT tester_state IO :=
-  fun _ ce =>
-    match ce with
-    | Client__Recv src =>
-      mkStateT
-        (fun s0 =>
-           let '(cs, os0) := s0 in
-           let recv_client os :=
-               '(op, cs') <- execStateT recv_bytes cs >>= findResponse;;
-               (* prerr_endline ("Client received " ++ to_string op);; *)
-               ret (op, (cs', os)) in
-           match src with
-           | Conn__Proxy _ =>
-             '(ocr, os1) <- execStateT recv_bytes_origin os0 >>= findRequest;;
-             match ocr with
-             | Some (c, r) =>
-               (* prerr_endline ("Proxy received " ++ to_string p);; *)
-               ret (Some (Packet (Conn__Proxy c)
-                                 (Conn__Authority $ originAuthority port)
-                                 (inl r)), (cs, os1))
-             | None => recv_client os1
-             end
-           | _ => recv_client os0
-           end)
-    | Client__Send pkt =>
-      let 'Packet s d p := pkt in
-      mkStateT
-        $ fun s0 =>
-            let '(cs, os) := s0 in
-            match s, p with
-            | Conn__Server , _
-            | Conn__Proxy _, _ =>
-              failwith "Tester cannot send from server"
-            | Conn__User _, inr _ =>
-              failwith "Unexpected sending response from client"
-            | Conn__Authority _, inl _ =>
-              failwith "Unexpected sending request from origin"
-            | Conn__User c, inl r =>
-              cs' <- execStateT (send_request c r) cs;;
-              ret (true, (cs', os))
-            | Conn__Authority a, inr r =>
-              match d with
-              | Conn__Proxy c => '(b, os') <- runStateT (send_response c r) os;;
-                              ret (b, (cs, os'))
-              | _ => ret (false, s0)
-              end
-            end
-    end.
-
 Definition io_choose {A} (default : A) (l : list A) : IO A :=
   match l with
   | [] => ret default
@@ -240,6 +190,54 @@ Definition gen_response (ss : server_state exp) (es : exp_state)
     $ fun os =>
         ret (Response (status_line_of_code 403) [] None, os).
 
+Definition client_io (port : N) : clientE ~> stateT tester_state IO :=
+  fun _ ce =>
+    match ce with
+    | Client__Recv src =>
+      mkStateT
+        (fun s0 =>
+           let '(cs, os0) := s0 in
+           let recv_client os :=
+               '(op, cs') <- execStateT recv_bytes cs >>= findResponse;;
+               (* prerr_endline ("Client received " ++ to_string op);; *)
+               ret (op, (cs', os)) in
+           match src with
+           | Conn__Proxy _ =>
+             '(ocr, os1) <- execStateT recv_bytes_origin os0 >>= findRequest;;
+             match ocr with
+             | Some (c, r) =>
+               (* prerr_endline ("Proxy received " ++ to_string p);; *)
+               ret (Some (Packet (Conn__Proxy c)
+                                 (Conn__Authority $ originAuthority port)
+                                 (inl r)), (cs, os1))
+             | None => recv_client os1
+             end
+           | _ => recv_client os0
+           end)
+    | Client__Send ss dst es =>
+      mkStateT
+        $ fun s0 =>
+            let '(cs, os) := s0 in
+            match dst with
+            | Conn__Proxy c =>
+              '(res, os1) <- runStateT (gen_response ss es c) os;;
+              '(b, os2) <- runStateT (send_response c res) os1;;
+              ret (if b : bool
+                   then Some $ Packet (Conn__Authority $ originAuthority port)
+                             dst $ inr res
+                   else None, (cs, os2))
+            | Conn__Server =>
+              req <- gen_request port ss es;;
+              c <- io_or (ret $ S $ length cs)
+                        (io_choose 1%nat (map fst cs));;
+              '(b, cs1) <- runStateT (send_request c req) cs;;
+              ret (if b : bool
+                   then Some $ Packet (Conn__User c) Conn__Server $ inl req
+                   else None, (cs1, os))
+            | _ => failwith ""
+            end
+    end.
+
 Fixpoint execute' {R} (fuel : nat) (port : N) (s : tester_state) (m : itree tE R)
   : IO (bool * tester_state) :=
   match fuel with
@@ -258,30 +256,13 @@ Fixpoint execute' {R} (fuel : nat) (port : N) (s : tester_state) (m : itree tE R
             b <- ORandom.bool tt;;
             execute' fuel port s (k b)
         end k
-      | (||ge|) =>
-        match ge in genE Y return (Y -> _) -> _ with
-        | Gen ss src es =>
-          fun k =>
-            match src with
-            | Conn__Proxy c =>
-              '(p, os') <- runStateT (gen_response ss es c) (snd s);;
-              execute' fuel port (fst s, os')
-                       (k $ Packet (Conn__Authority $ originAuthority port) src
-                          $ inr p)
-            | _ =>
-              c <- io_or (ret $ S $ length (fst s))
-                        (io_choose 1%nat (map fst (fst s)));;
-              p <- Packet (Conn__User c) src ∘ inl <$> gen_request port ss es;;
-              execute' fuel port s (k p)
-            end
-        end k
-      | (|||le|) =>
+      | (||le|) =>
         match le in logE Y return (Y -> _) -> _ with
         | Log str =>
           fun k => prerr_endline ("Tester: " ++ str);;
                 execute' fuel port s (k tt)
         end k
-      | (||||ce) => '(r, s') <- runStateT (client_io port _ ce) s;;
+      | (|||ce) => '(r, s') <- runStateT (client_io port _ ce) s;;
                   execute' fuel port s' (k r)
       end
     end

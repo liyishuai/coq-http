@@ -208,16 +208,14 @@ CoFixpoint match_event {T R} (e0 : testerE R) (r : R) (m : itree stE T)
 Definition match_observe {T R} (e : testerE T) (r : T) (l : list (itree stE R))
   : list (itree stE R) := map (match_event e r) l.
 
-Variant genE : Type -> Type :=
-  Gen : server_state exp -> connT -> exp_state -> genE (packetT id).
-
 Variant clientE : Type -> Type :=
 | Client__Recv : connT -> clientE (option (packetT id))
-| Client__Send : packetT id -> clientE bool.
+| Client__Send : server_state exp -> connT -> exp_state ->
+               clientE (option (packetT id)).
 
 Class Is__tE E `{failureE -< E} `{nondetE -< E}
-      `{genE -< E} `{logE -< E} `{clientE -< E}.
-Notation tE := (failureE +' nondetE +' genE +' logE +' clientE).
+      `{logE -< E} `{clientE -< E}.
+Notation tE := (failureE +' nondetE +' logE +' clientE).
 Instance tE_Is__tE : Is__tE tE. Defined.
 
 CoFixpoint backtrack' {E R} `{Is__tE E} (others : list (itree stE R))
@@ -253,12 +251,13 @@ CoFixpoint backtrack' {E R} `{Is__tE E} (others : list (itree stE R))
     | (||||te) =>
       match te in testerE Y return (Y -> _) -> _ with
       | Tester__Send st oh es =>
-        fun k => pkt <- embed Gen st oh es;;
-              b <- embed Client__Send pkt;;
-              if b : bool
-              then Tau (backtrack' (match_observe (Tester__Send st oh es)
+        fun k => opkt <- embed Client__Send st oh es;;
+              match opkt with
+              | Some pkt =>
+                Tau (backtrack' (match_observe (Tester__Send st oh es)
                                                   pkt others) (k pkt))
-              else catch "Not ready to send"
+              | None => catch "Not ready to send"
+              end
       | Tester__Recv src =>
         fun k => opkt <- embed Client__Recv src;;
               match opkt with
