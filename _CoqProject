@@ -12,4 +12,5 @@ theories/NetUnix.v
 theories/Trace.v
 theories/Observe.v
 theories/Tester.v
+theories/TesterSpec.v
 theories/Execute.v
