@@ -100,9 +100,9 @@ Fixpoint accepts' {R} (fuel : nat) (m : itree tE R) (l : list traceT)
             let rr := accepts' fuel (k false) l in
             match rl, rr with
             | Some (inl el), _ =>
-              Some (inl $ "TRUE  branch failed with: " ++ el)
+              Some (inl $ "TRUE  branch failed with: " ++ CRLF ++ el)
             | _, Some (inl er) =>
-              Some (inl $ "FALSE branch failed with: " ++ er)
+              Some (inl $ "FALSE branch failed with: " ++ CRLF ++ er)
             | _, None => rl
             | _, _ => rr
             end

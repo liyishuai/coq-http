@@ -88,7 +88,7 @@ Definition parseQuery : parser (option query) :=
                                <|> flip String "" <$> satisfy (in_string "/?"))).
 
 Definition parseAbsoluteURI : parser absolute_uri :=
-  liftA2 URI parseScheme (expectString "//";; parseAuthority)
+  liftA2 URI parseScheme (expectString "://";; parseAuthority)
          <*> parseAbsolutePath <*> parseQuery.
 
 (** https://httpwg.org/http-core/draft-ietf-httpbis-semantics-latest.html#rfc.section.5.7.4 *)

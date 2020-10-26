@@ -21,7 +21,7 @@ Goal parse parseRequest ("HEAD http://www.example.org/ HTTP/1.7"
                               ++ CRLF ++ CRLF ++ "message")
      = inr (Request
               (RequestLine Method__HEAD
-                  (RequestTarget__Absolute Scheme__HTTP
+                  (RequestTarget__Absolute $ URI Scheme__HTTP
                                          (Authority None "www.example.org" None)
                                          "" None)
                   (Version 1 7))
