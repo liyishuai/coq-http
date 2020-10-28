@@ -44,9 +44,6 @@ Definition trace1 : list traceT :=
 Goal is_trace echo0 trace1 = false.
 Proof. reflexivity. Qed.
 
-Goal accepts (backtrack echo0) trace1 = false.
-Proof. reflexivity. Qed.
-
 Definition echo1 : itree stE void :=
   (rec-fix loop l :=
      b <- trigger Decide;;
@@ -75,4 +72,17 @@ Proof. reflexivity. Qed.
 Goal is_trace echo1 trace1 = true.
 Proof. reflexivity. Qed.
 
-Compute accepts' bigNumber (backtrack echo1) trace1.
+Goal accepts (backtrack echo1) trace1 = true.
+Proof. reflexivity. Qed.
+
+Definition trace2 : list traceT :=
+  [Trace__Out $ Packet (Conn__User 0) Conn__Server $ payload 0;
+   Trace__Out $ Packet (Conn__User 1) Conn__Server $ payload 1;
+   Trace__In  $ Packet Conn__Server (Conn__User 0) $ payload 1;
+   Trace__In  $ Packet Conn__Server (Conn__User 1) $ payload 0].
+
+Goal is_trace echo1 trace2 = false.
+Proof. reflexivity. Qed.
+
+Goal accepts (backtrack echo1) trace2 = false.
+Proof. reflexivity. Qed.

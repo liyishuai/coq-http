@@ -120,18 +120,18 @@ Fixpoint accepts' {R} (fuel : nat) (m : itree tE R) (l : list traceT)
       | (|||ce) =>
         match l with
         | [] => Some (inr None)
-        | h::l =>
+        | h::l' =>
           match ce in clientE Y return (Y -> _) -> _ with
           | Client__Recv _ =>
             fun k =>
               match h with
-              | Trace__In pkt => accepts' fuel (k $ Some pkt) l
+              | Trace__In pkt => accepts' fuel (k $ Some pkt) l'
               | Trace__Out _  => accepts' fuel (k   None)     l
               end
           | Client__Send _ _ _ =>
             fun k =>
               match h with
-              | Trace__Out pkt => accepts' fuel (k $ Some pkt) l
+              | Trace__Out pkt => accepts' fuel (k $ Some pkt) l'
               | Trace__In  _   => accepts' fuel (k   None)     l
               end
           end k
