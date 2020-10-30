@@ -8,6 +8,7 @@ From ExtLib Require Export
 From SimpleIO Require Export
      IO_Bytes
      IO_Float
+     IO_Random
      IO_Sys
      IO_Unix
      SimpleIO.
@@ -28,15 +29,7 @@ Import
 Coercion int_of_n : N >-> int.
 
 Definition getport : IO N :=
-  let default : N := 8000 in
-  oport <- getenv_opt "PORT";;
-  ret (match oport with
-       | Some ostr => match int_of_ostring_opt ostr with
-                     | Some port => n_of_int port
-                     | None => default
-                     end
-       | None => default
-       end).
+  N.add 8000 ∘ n_of_int <$> ORandom.int 5000.
 
 Definition try {a b} (f : IO a) (g : IO b) : IO (option a) :=
   catch_error
@@ -71,7 +64,7 @@ Definition create_sock : IO (N * file_descr) :=
              ofd <- create_sock' p;;
              match ofd with
              | Some fd => ret (p, fd)
-             | None    => next (1 + p)
+             | None    => getport >>= next
              end).
 
 Definition accept_conn (sfd : file_descr) : IO file_descr :=
