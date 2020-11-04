@@ -120,8 +120,9 @@ Definition random_request (origin_port : N) (s : server_state exp) (es : exp_sta
   : IO http_request :=
   m <- io_or (ret Method__GET) (ret Method__PUT);;
   p <- gen_path s;;
-  a <- io_or (ret $ Authority None "localhost" (Some server_port))
-            (ret $ Authority None "host.docker.internal" (Some origin_port));;
+  (* a <- io_or (ret $ Authority None "localhost" (Some server_port)) *)
+  (*           (ret $ Authority None "host.docker.internal" (Some origin_port));; *)
+  let a : authority := Authority None "host.docker.internal" (Some origin_port) in
   let uri : absolute_uri :=
       URI Scheme__HTTP a p None in
   let l : request_line :=
@@ -182,13 +183,117 @@ Definition gen_request' (p : path) (s : server_state exp)
 Definition gen_request (port : N) (s : server_state exp) (es : exp_state)
   : IO http_request :=
   p <- gen_path s;;
-  io_or (gen_request' p s es) (random_request port s es).
+  (* io_or (gen_request' p s es) (random_request port s es). *)
+  random_request port s es.
+
+Definition not_modified
+  : state (server_state id) (http_response id) :=
+  ret (Response (status_line_of_code 304) [] None).
+
+Definition bad_request
+  : state (server_state id) (http_response id) :=
+  ret (Response (status_line_of_code 400) [] None).
+
+Definition not_found
+  : state (server_state id) (http_response id) :=
+  ret (Response (status_line_of_code 404) [] None).
+
+Definition method_not_allowed
+  : state (server_state id) (http_response id) :=
+  ret (Response (status_line_of_code 405) [] None).
+
+Definition precondition_failed
+  : state (server_state id) (http_response id) :=
+  ret (Response (status_line_of_code 412) [] None).
+
+Definition if_match (p : path) (hs : list (field_line id))
+           (m : state (server_state id) (http_response id))
+  : state (server_state id) (http_response id) :=
+  mkState
+    (fun ss =>
+       let reject := runState precondition_failed ss in
+       let accept := runState m ss in
+       match findField "If-Match" hs with
+       | Some v =>
+         match get p ss with
+         | Some (Some (ResourceState _ oetag)) =>
+           match v, oetag with
+           | "*", _  => accept
+           | _, None => reject
+           | v, Some t =>
+             match parse (parseCSV parseEntityTag) v with
+             | inl _ => runState bad_request ss
+             | inr (ts, _) =>
+               if existsb (etag_match false t) ts
+               then accept
+               else reject
+             end
+           end
+         | _ => reject
+         end
+       | None => accept
+       end).
+
+Definition if_none_match (methd : request_method) (p : path)
+           (hs : list (field_line id))
+           (m : state (server_state id) (http_response id))
+  : state (server_state id) (http_response id) :=
+  mkState
+    (fun ss =>
+       let reject :=
+           match methd with
+           | Method__GET | Method__HEAD => runState not_modified ss
+           | _ => runState precondition_failed ss
+           end in
+       let accept := runState m ss in
+       match findField "If-None-Match" hs with
+       | Some "*" =>
+         match get p ss with
+         | Some (Some _) => reject
+         | _ => accept
+         end
+       | Some v =>
+         match get p ss with
+         | Some (Some (ResourceState _ (Some t))) =>
+           match parse (parseCSV parseEntityTag) v with
+           | inl _ => runState bad_request ss
+           | inr (ts, _) =>
+             if existsb (etag_match true t) ts
+             then reject
+             else accept
+           end
+         | _ => accept
+         end
+       | None => accept
+       end).
+
+Definition execute_request (req : http_request)
+  : state (server_state id) (http_response id) :=
+  mkState
+    (fun ss =>
+       let '(Request (RequestLine methd tgt ver) fields obody) := req in
+       match target_uri tgt fields with
+       | Some u =>
+         let 'URI s a p oq := u in
+         match methd with
+         | Method__GET
+         | Method__PUT
+         | _ => runState method_not_allowed ss
+         end
+       | None => runState bad_request ss
+       end).
 
 Definition gen_response (ss : server_state exp) (es : exp_state)
-           (c : clientT) : stateT origin_state IO (http_response id) :=
-  mkStateT
-    $ fun os =>
-        ret (Response (status_line_of_code 403) [] None, os).
+           (c : clientT) : state origin_state (http_response id) :=
+  mkState
+    (fun os =>
+       let '(sfd, port, conns, ss) := os in
+       match get c conns with
+       | Some (fd, str, Some req) =>
+         let (res, ss') := runState (execute_request req) ss in
+         (res, (sfd, port, conns, ss'))
+       | _ => (Response (status_line_of_code 403) [] None, os)
+       end).
 
 Definition client_io (port : N) : clientE ~> stateT tester_state IO :=
   fun _ ce =>
@@ -220,7 +325,7 @@ Definition client_io (port : N) : clientE ~> stateT tester_state IO :=
             let '(cs, os) := s0 in
             match dst with
             | Conn__Proxy c =>
-              '(res, os1) <- runStateT (gen_response ss es c) os;;
+              let (res, os1) := runState (gen_response ss es c) os in
               '(b, os2) <- runStateT (send_response c res) os1;;
               ret (if b : bool
                    then Some $ Packet (Conn__Authority $ originAuthority port)

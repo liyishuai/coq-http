@@ -220,10 +220,9 @@ Definition if_match : Monads.stateT (server_state exp) (itree E) unit :=
     if v =? "*"
     then
       '(st', r) <- getResource st;;
-      match resource__etag <$> r with
-      | Some (Some _) => accept st'
-      | Some  None    => reject st'
-      | None          => not_found;; ret (st', tt)
+      match r with
+      | Some _ => accept st'
+      | None   => reject st'
       end
     else
       match parse (parseCSV parseEntityTag) v with
@@ -245,8 +244,7 @@ Definition if_match : Monads.stateT (server_state exp) (itree E) unit :=
           if b
           then accept st'
           else reject st'
-        | Some None => reject st'
-        | None      => not_found;; ret (st', tt)
+        | Some None | None => reject st'
         end
       end
   | None => accept st

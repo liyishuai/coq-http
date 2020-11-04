@@ -209,6 +209,7 @@ Definition send_response (c : clientT) (res : http_response id) : stateT origin_
                     if o + sent =? len
                     then prerr_endline ("================SENT================origin"
                                           ++ CRLF ++ str);;
+                         close fd;;
                          ret true
                     else send_rec (o + sent))%int int_zero;;
          ret (b, s)

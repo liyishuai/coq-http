@@ -24,14 +24,18 @@ stop:
 
 SERVER?=ysli/apache:proxy
 PORT?=80
+CPORT?=80
 
 server: stop
 	if [ $$(which docker) ]; \
 		then docker pull $(SERVER); \
-		     docker run -d --name $@ -p $(PORT):80 $(SERVER); \
+		     docker run -d --name $@ -p $(PORT):$(CPORT) $(SERVER); \
 		else echo Docker not found; \
 		     exit 1; \
 	fi
+
+py:
+	$(MAKE) server CPORT=8899 SERVER=abhinavsingh/proxy.py
 
 test: TestHttp.native
 	./TestHttp.native 2> client.log
