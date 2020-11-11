@@ -207,7 +207,8 @@ Definition send_response (c : clientT) (res : http_response id) : stateT origin_
                   then ret false
                   else
                     if o + sent =? len
-                    then prerr_endline ("================SENT================origin"
+                    then prerr_endline ("=============PROXY SENT============="
+                                          ++ to_string c
                                           ++ CRLF ++ str);;
                          ret true
                     else send_rec (o + sent))%int int_zero;;

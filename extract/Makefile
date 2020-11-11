@@ -15,7 +15,7 @@ clean: $(COQMAKEFILE)
 %.native:
 	$(MAKE) $(COQMAKEFILE)
 	$(MAKE) -f $(COQMAKEFILE) $*.vo
-	ocamlbuild -lib unix $@
+	ocamlbuild -use-ocamlfind $@
 
 stop:
 	-if [ $$(which docker) ]; \
@@ -28,7 +28,7 @@ CPORT?=80
 
 server: stop
 	if [ $$(which docker) ]; \
-		then docker pull $(SERVER); \
+		then docker pull $(SERVER) || true; \
 		     docker run -d --name $@ -p $(PORT):$(CPORT) $(SERVER); \
 		else echo Docker not found; \
 		     exit 1; \
@@ -44,7 +44,7 @@ bug%:
 	$(MAKE) server SERVER=ysli/apache:$@
 
 test: TestHttp.native
-	./TestHttp.native 2> client.log
+	time ./TestHttp.native 2> client.log
 
 etag-test:
 	curl -X PUT -d Fine localhost:$(PORT)/wat

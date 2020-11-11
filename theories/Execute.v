@@ -1,4 +1,6 @@
 From SimpleIO Require Export
+     IO_Float
+     IO_Sys
      IO_Random.
 From HTTP Require Export
      NetUnix
@@ -41,7 +43,8 @@ Fixpoint findRequest'
       | inl None => '(or, t') <- findRequest' t;;
                    ret (or, conn :: t')
       | inr (r, str') =>
-        prerr_endline ("==============RECEIVED==============origin"
+        prerr_endline ("===========PROXY RECEIVED==========="
+                         ++ to_string c
                          ++ CRLF ++ request_to_string r);;
         ret (Some (c, r), (c, (fd, str', Some r)) :: t)
       end
@@ -80,7 +83,7 @@ Fixpoint gen_many {A} (n : nat) (ma : IO A) : IO (list A) :=
   end.
 
 Definition gen_string : IO string :=
-  String "~" ∘ String.concat "" <$> gen_many 0 gen_string'.
+  String "~" ∘ String.concat "" <$> gen_many 1 gen_string'.
 
 Definition gen_path (s : server_state exp) : IO path :=
   let paths : list path := map fst s in
@@ -98,7 +101,7 @@ Definition gen_etag (p : path) (s : server_state exp) (es : exp_state)
   (* prerr_endline ("Generating ETag for " *)
   (*                  ++ to_string p ++ " under state " *)
   (*                  ++ to_string (s, es));; *)
-  let random_tag := io_choose """12-5b0dffb40b3bb""" tags in
+  let random_tag := io_choose """Random""" tags in
   match get p s with
   | None
   | Some None
@@ -109,7 +112,7 @@ Definition gen_etag (p : path) (s : server_state exp) (es : exp_state)
     | Exp__ETag  x =>
       match get x (snd es) with
       | Some (inl t)  => ret t
-      | Some (inr ts) => io_choose """a-5b0dffb40d6e3""" ts
+      | Some (inr ts) => io_choose """Unknown""" ts
       | None => random_tag
       end
     | _ => random_tag
@@ -182,7 +185,8 @@ Definition gen_request' (p : path) (s : server_state exp)
 Definition gen_request (port : N) (s : server_state exp) (es : exp_state)
   : IO http_request :=
   p <- gen_path s;;
-  io_or (gen_request' p s es) (random_request port s es).
+  gen_request' p s es.
+  (* io_or (gen_request' p s es) (random_request port s es). *)
 
 Definition not_modified
   : state (server_state id) (http_response id) :=
@@ -190,23 +194,28 @@ Definition not_modified
 
 Definition bad_request
   : state (server_state id) (http_response id) :=
-  ret (Response (status_line_of_code 400) [] None).
+  ret (Response (status_line_of_code 400)
+                [@Field id "Content-Length" "0"] $ Some "").
 
 Definition forbidden
   : state (server_state id) (http_response id) :=
-  ret (Response (status_line_of_code 403) [] None).
+  ret (Response (status_line_of_code 403)
+                [@Field id "Content-Length" "0"] $ Some "").
 
 Definition not_found
   : state (server_state id) (http_response id) :=
-  ret (Response (status_line_of_code 404) [] None).
+  ret (Response (status_line_of_code 404)
+                [@Field id "Content-Length" "0"] $ Some "").
 
 Definition method_not_allowed
   : state (server_state id) (http_response id) :=
-  ret (Response (status_line_of_code 405) [] None).
+  ret (Response (status_line_of_code 405)
+                [@Field id "Content-Length" "0"] $ Some "").
 
 Definition precondition_failed
   : state (server_state id) (http_response id) :=
-  ret (Response (status_line_of_code 412) [] None).
+  ret (Response (status_line_of_code 412)
+                [@Field id "Content-Length" "0"] $ Some "").
 
 Definition if_match (p : path) (hs : list (field_line id))
            (m : state (server_state id) (http_response id))
@@ -336,8 +345,8 @@ Definition client_io (port : N) : clientE ~> stateT tester_state IO :=
                    else None, (cs, os2))
             | Conn__Server =>
               req <- gen_request port ss es;;
-              c <- io_or (ret $ S $ length cs)
-                        (io_choose 1%nat (map fst cs));;
+              let cids : list clientT := map fst cs in
+              c <- io_choose 1%nat (S (length cs) :: cids ++ cids ++ cids ++ cids);;
               '(b, cs1) <- runStateT (send_request c req) cs;;
               ret (if b : bool
                    then Some $ Packet (Conn__User c) Conn__Server $ inl req
@@ -376,15 +385,19 @@ Fixpoint execute' {R} (fuel : nat) (port : N) (s : tester_state) (m : itree tE R
     end
   end.
 
+Parameter time : unit -> IO float.
+Extract Constant time => "fun t k -> k (Sys.time t)".
+
 Definition execute {R} (m : itree tE R) : IO bool :=
   prerr_endline "<<<<< begin test >>>>>>>";;
   '(port, sfd) <- create_sock;;
-  '(b, s) <- execute' 1000000 port ([], (sfd, port, [], [])) m;;
+  '(b, s) <- execute' 100000000 port ([], (sfd, port, [], [])) m;;
   let '(cs, (sfd, _, conns, _)) := s in
   fold_left (fun m fd => OUnix.close fd;; m)
             (map (fst ∘ snd) cs ++ map (fst ∘ fst ∘ snd) conns)
             (OUnix.close sfd);;
   prerr_endline "<<<<<<< end test >>>>>>>";;
+  OFloat.to_string <$> OSys.time tt >>= print_endline;;
   ret b.
 
 Definition test {R} : itree smE R -> IO bool :=
