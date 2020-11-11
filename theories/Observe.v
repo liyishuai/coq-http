@@ -44,8 +44,9 @@ Definition dualize {E R} `{Is__oE E} (e : netE R) : itree E R :=
     match s0, s with
     | Conn__Proxy c0, Conn__Proxy c =>
       embed Unify__Proxy c0 c;;
-      embed Log ("Unification complete: "
-                   ++ to_string c0 ++ " -> " ++ to_string c)
+      (* embed Log ("Unification complete: " *)
+      (*              ++ to_string c0 ++ " -> " ++ to_string c) *)
+      ret tt
     | _, _ =>
       if s = s0?
       then ret tt
@@ -127,7 +128,7 @@ Definition logger {E R} `{Is__oE E} (m : itree oE R)
        match e with
        | (Throw err|) =>
          fun s =>
-           embed Log ("Failing trace: " ++ CRLF ++ list_to_string (rev' s));;
+           (* embed Log ("Failing trace: " ++ CRLF ++ list_to_string (rev' s));; *)
            throw err
        | (|||||e) =>
          match e in observeE Y return Monads.stateT _ _ Y with

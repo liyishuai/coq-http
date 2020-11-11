@@ -1,6 +1,7 @@
 From HTTP Require Import
      Parser
-     Printer.
+     Printer
+     Semantics.
 
 Goal parse parseRequest ("GET /pub/WWW/TheProject.html HTTP/1.8"
                            ++ CRLF ++ "Host: www.google.com"
@@ -32,4 +33,14 @@ Proof. reflexivity. Qed.
 Goal parse parseResponse ("HTTP/1.1 404 Not Found"
                             ++ CRLF ++ CRLF)
      = inr (Response (Status (Version 1 1) 404 (Some "Not Found")) [] None, "").
+Proof. reflexivity. Qed.
+
+Definition parse_print_response
+  : http_response id -> option string + http_response id * string :=
+  parse parseResponse ∘ response_to_string.
+
+Definition parse_print_response_spec (r : http_response id) : Prop :=
+  parse_print_response r = inr (r, "").
+
+Goal parse_print_response_spec (Response (status_line_of_code 405) [] None).
 Proof. reflexivity. Qed.

@@ -181,7 +181,7 @@ Definition unifier {E R} `{Is__stE E} (m : itree oE R)
             | (|||||oe) => instantiate_observe oe
             | (Throw err|) =>
               fun s =>
-                embed Log ("Failing state: " ++ to_string s);;
+                (* embed Log ("Failing state: " ++ to_string s);; *)
                 throw err
             | (|e|)
             | (||e|)
@@ -228,7 +228,7 @@ CoFixpoint backtrack' {E R} `{Is__tE E} (others : list (itree stE R))
         match others with
         | [] => throw err
         | other :: others' =>
-          embed Log ("Retry upon " ++ err);;
+          (* embed Log ("Retry upon " ++ err);; *)
           Tau (backtrack' others' other)
         end in
     match e with
@@ -266,10 +266,10 @@ CoFixpoint backtrack' {E R} `{Is__tE E} (others : list (itree stE R))
               | None =>
                 match others with
                 | [] =>
-                  embed Log ("No more choices, retry receiving");;
+                  (* embed Log ("No more choices, retry receiving");; *)
                   Tau (backtrack' [] m)
                 | other :: others' =>
-                  embed Log ("Postpone receiving");;
+                  (* embed Log ("Postpone receiving");; *)
                   Tau (backtrack' (others' ++ [m]) other)
                 end
               end

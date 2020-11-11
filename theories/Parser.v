@@ -294,5 +294,9 @@ Definition parseResponse : parser (http_response id) :=
   parseCRLF;;
   f <- parseFieldLines;;
   parseCRLF;;
-  b <- parseBody f;;
+  b <-
+  match status__code l with
+  | 204 | 304 => ret None
+  | _ => parseBody f
+  end;;
   ret (Response l f b).

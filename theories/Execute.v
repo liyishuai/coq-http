@@ -71,7 +71,7 @@ Definition io_or {A} (x y : IO A) : IO A :=
   if b : bool then x else y.
 
 Definition gen_string' : IO string :=
-  io_choose "" ["Hello"; "World"; "Foo"; "Bar"].
+  io_choose "" ["Hello"; "World"].
 
 Fixpoint gen_many {A} (n : nat) (ma : IO A) : IO (list A) :=
   match n with
@@ -80,7 +80,7 @@ Fixpoint gen_many {A} (n : nat) (ma : IO A) : IO (list A) :=
   end.
 
 Definition gen_string : IO string :=
-  String.concat "" <$> gen_many 10 gen_string'.
+  String "~" ∘ String.concat "" <$> gen_many 0 gen_string'.
 
 Definition gen_path (s : server_state exp) : IO path :=
   let paths : list path := map fst s in
@@ -120,9 +120,8 @@ Definition random_request (origin_port : N) (s : server_state exp) (es : exp_sta
   : IO http_request :=
   m <- io_or (ret Method__GET) (ret Method__PUT);;
   p <- gen_path s;;
-  (* a <- io_or (ret $ Authority None "localhost" (Some server_port)) *)
-  (*           (ret $ Authority None "host.docker.internal" (Some origin_port));; *)
-  let a : authority := Authority None "host.docker.internal" (Some origin_port) in
+  a <- io_or (ret $ Authority None "localhost" (Some server_port))
+            (ret $ Authority None "host.docker.internal" (Some origin_port));;
   let uri : absolute_uri :=
       URI Scheme__HTTP a p None in
   let l : request_line :=
@@ -183,8 +182,7 @@ Definition gen_request' (p : path) (s : server_state exp)
 Definition gen_request (port : N) (s : server_state exp) (es : exp_state)
   : IO http_request :=
   p <- gen_path s;;
-  (* io_or (gen_request' p s es) (random_request port s es). *)
-  random_request port s es.
+  io_or (gen_request' p s es) (random_request port s es).
 
 Definition not_modified
   : state (server_state id) (http_response id) :=
@@ -193,6 +191,10 @@ Definition not_modified
 Definition bad_request
   : state (server_state id) (http_response id) :=
   ret (Response (status_line_of_code 400) [] None).
+
+Definition forbidden
+  : state (server_state id) (http_response id) :=
+  ret (Response (status_line_of_code 403) [] None).
 
 Definition not_found
   : state (server_state id) (http_response id) :=
@@ -276,7 +278,8 @@ Definition execute_request (req : http_request)
        | Some u =>
          let 'URI s a p oq := u in
          match methd with
-         | Method__GET
+         | Method__GET =>
+           runState forbidden ss
          | Method__PUT
          | _ => runState method_not_allowed ss
          end
@@ -374,12 +377,14 @@ Fixpoint execute' {R} (fuel : nat) (port : N) (s : tester_state) (m : itree tE R
   end.
 
 Definition execute {R} (m : itree tE R) : IO bool :=
+  prerr_endline "<<<<< begin test >>>>>>>";;
   '(port, sfd) <- create_sock;;
-  '(b, s) <- execute' bigNumber port ([], (sfd, port, [], [])) m;;
+  '(b, s) <- execute' 1000000 port ([], (sfd, port, [], [])) m;;
   let '(cs, (sfd, _, conns, _)) := s in
   fold_left (fun m fd => OUnix.close fd;; m)
             (map (fst ∘ snd) cs ++ map (fst ∘ fst ∘ snd) conns)
             (OUnix.close sfd);;
+  prerr_endline "<<<<<<< end test >>>>>>>";;
   ret b.
 
 Definition test {R} : itree smE R -> IO bool :=

@@ -37,6 +37,12 @@ server: stop
 py:
 	$(MAKE) server CPORT=8899 SERVER=abhinavsingh/proxy.py
 
+hs:
+	$(MAKE) server CPORT=31081 SERVER=ysli/http-proxy
+
+bug%:
+	$(MAKE) server SERVER=ysli/apache:$@
+
 test: TestHttp.native
 	./TestHttp.native 2> client.log
 

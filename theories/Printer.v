@@ -95,13 +95,13 @@ Definition status_to_string (l : status_line) : string :=
   | None   => ""
   end)).
 
-Definition field_to_string (f : field_line id) : string :=
-  let 'Field n v := f in n ++ ": " ++ v.
-
 Definition CRLF : string := String "013" (String "010" "").
 
+Definition field_to_string (f : field_line id) : string :=
+  let 'Field n v := f in n ++ ": " ++ v ++ CRLF.
+
 Definition fields_to_string (l : list (field_line id)) : string :=
-  String.concat CRLF (map field_to_string l).
+  String.concat "" (map field_to_string l).
 
 Definition body_to_string (ob : option message_body) : string :=
   match ob with
@@ -111,13 +111,12 @@ Definition body_to_string (ob : option message_body) : string :=
 
 Definition request_to_string (r : http_request) : string :=
   let 'Request l fs ob := r in
-  line_to_string (request__line r) ++ CRLF ++
-  fields_to_string (request__fields r) ++ CRLF ++
-  CRLF ++
-  body_to_string (request__body r).
+  line_to_string l ++ CRLF ++
+  fields_to_string fs ++ CRLF ++
+  body_to_string ob.
 
 Definition response_to_string (r : http_response id) : string :=
-  status_to_string (response__line r) ++ CRLF ++
-  fields_to_string (response__fields r) ++ CRLF ++
-  CRLF ++
-  body_to_string (response__body r).
+  let 'Response s fs ob := r in
+  status_to_string s ++ CRLF ++
+  fields_to_string fs ++ CRLF ++
+  body_to_string ob.
