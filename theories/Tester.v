@@ -78,9 +78,9 @@ Variant testerE : Type -> Type :=
 | Tester__Send : server_state exp -> connT ->
                exp_state -> testerE (packetT id).
 
-Class Is__stE E `{failureE -< E} `{nondetE -< E}
+Class Is__stE E `{failureE -< E}
       `{decideE -< E} `{logE -< E} `{testerE -< E}.
-Notation stE := (failureE +' nondetE +' decideE +' logE +' testerE).
+Notation stE := (failureE +' decideE +' logE +' testerE).
 Instance stE_Is__stE : Is__stE stE. Defined.
 
 Definition instantiate_unify {E A} `{Is__stE E} (e : unifyE A)
@@ -177,15 +177,14 @@ Definition unifier {E R} `{Is__stE E} (m : itree oE R)
   : Monads.stateT unify_state (itree E) R :=
   interp (fun _ e =>
             match e with
-            | (|||ue|)  => instantiate_unify   ue
-            | (|||||oe) => instantiate_observe oe
+            | (||ue|)  => instantiate_unify   ue
+            | (||||oe) => instantiate_observe oe
             | (Throw err|) =>
               fun s =>
                 (* embed Log ("Failing state: " ++ to_string s);; *)
                 throw err
             | (|e|)
-            | (||e|)
-            | (||||e|) => @liftState unify_state _ (itree _) _ (trigger e)
+            | (|||e|) => @liftState unify_state _ (itree _) _ (trigger e)
             end) m.
 
 CoFixpoint match_event {T R} (e0 : testerE R) (r : R) (m : itree stE T)
@@ -195,7 +194,7 @@ CoFixpoint match_event {T R} (e0 : testerE R) (r : R) (m : itree stE T)
   | TauF m' => Tau (match_event e0 r m')
   | VisF e k =>
     match e with
-    | (||||oe) =>
+    | (|||oe) =>
       match oe in testerE Y, e0 in testerE R return (Y -> _) -> R -> _ with
       | Tester__Send _ _ _, Tester__Send _ _ _
       | Tester__Recv _    , Tester__Recv _ => id
@@ -233,22 +232,18 @@ CoFixpoint backtrack' {E R} `{Is__tE E} (others : list (itree stE R))
         end in
     match e with
     | (Throw err|) => catch err
-    | (|ne|) =>
-      match ne in nondetE Y return (Y -> _) -> _ with
-      | Or => fun k => b <- trigger Or;; Tau (backtrack' others (k b))
-      end k
-    | (||de|) =>
+    | (|de|) =>
       match de in decideE Y return (Y -> _) -> _ with
       | Decide => fun k => b <- trigger Or;;
                        Tau (backtrack' (k (negb b) :: others) (k b))
       end k
-    | (|||le|) =>
+    | (||le|) =>
       match le in logE Y return (Y -> _) -> _ with
       | Log str =>
         fun k => embed Log ("Observer: " ++ str);;
               Tau (backtrack' others (k tt))
       end k
-    | (||||te) =>
+    | (|||te) =>
       match te in testerE Y return (Y -> _) -> _ with
       | Tester__Send st oh es =>
         fun k => opkt <- embed Client__Send st oh es;;

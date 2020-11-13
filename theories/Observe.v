@@ -29,9 +29,9 @@ Variant unifyE : Type -> Type :=
 
 Notation failureE := (exceptE string).
 
-Class Is__oE E `{failureE -< E} `{nondetE -< E}
+Class Is__oE E `{failureE -< E}
       `{decideE -< E} `{unifyE -< E} `{logE -< E} `{observeE -< E}.
-Notation oE := (failureE +' nondetE +' decideE +' unifyE +' logE +' observeE).
+Notation oE := (failureE +' decideE +' unifyE +' logE +' observeE).
 Instance oE_Is__oE : Is__oE oE. Defined.
 
 (* TODO: distinguish proxy from clients *)
@@ -130,7 +130,7 @@ Definition logger {E R} `{Is__oE E} (m : itree oE R)
          fun s =>
            (* embed Log ("Failing trace: " ++ CRLF ++ list_to_string (rev' s));; *)
            throw err
-       | (|||||e) =>
+       | (||||e) =>
          match e in observeE Y return Monads.stateT _ _ Y with
          | Observe__ToServer ss c =>
            fun s =>
@@ -143,8 +143,7 @@ Definition logger {E R} `{Is__oE E} (m : itree oE R)
          end
        | (|e|)
        | (||e|)
-       | (|||e|)
-       | (||||e|) => @liftState (list traceT) _ (itree _) _ (trigger e)
+       | (|||e|) => @liftState (list traceT) _ (itree _) _ (trigger e)
        end%string) m.
 
 Definition observer {E R} `{Is__oE E} (m : itree nE R) : itree E R :=

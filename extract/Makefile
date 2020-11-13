@@ -43,8 +43,10 @@ hs:
 bug%:
 	$(MAKE) server SERVER=ysli/apache:$@
 
+TIMEOUT?=0
+
 test: TestHttp.native
-	time ./TestHttp.native 2> client.log
+	time timeout $(TIMEOUT) ./TestHttp.native 2> client.log
 
 etag-test:
 	curl -X PUT -d Fine localhost:$(PORT)/wat

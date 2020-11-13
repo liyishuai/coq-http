@@ -12,22 +12,7 @@ Fixpoint is_trace' {R} (fuel : nat) (m : itree stE R) (l : list traceT)
     | VisF e k =>
       match e with
       | (Throw err|) => Some (inl err)
-      | (|ne|) =>
-        match ne in nondetE Y return (Y -> _) -> _ with
-        | Or =>
-          fun k =>
-            let rl := is_trace' fuel (k true)  l in
-            let rr := is_trace' fuel (k false) l in
-            match rl, rr with
-            | Some (inl el), Some (inl er) =>
-              Some (inl $ "IF   branch failed with: "
-                        ++ el ++ CRLF ++ "ELSE branch failed with: " ++ er)
-            | _, Some (inl _)
-            | Some (inr _), _ => rl
-            | _, _ => rr
-            end
-        end k
-      | (||de|) =>
+      | (|de|) =>
         match de in decideE Y return (Y -> _) -> _ with
         | Decide =>
           fun k =>
@@ -42,7 +27,7 @@ Fixpoint is_trace' {R} (fuel : nat) (m : itree stE R) (l : list traceT)
             | _, _ => rr
             end
         end k
-      | (|||le|) =>
+      | (||le|) =>
         match le in logE Y return (Y -> _) -> _ with
         | Log str =>
           fun k =>
@@ -52,7 +37,7 @@ Fixpoint is_trace' {R} (fuel : nat) (m : itree stE R) (l : list traceT)
             | r => r
             end
         end k
-      | (||||te) =>
+      | (|||te) =>
         match l with
         | [] => Some (inr None)
         | h::l =>

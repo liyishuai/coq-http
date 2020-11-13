@@ -391,7 +391,7 @@ Extract Constant time => "fun t k -> k (Sys.time t)".
 Definition execute {R} (m : itree tE R) : IO bool :=
   prerr_endline "<<<<< begin test >>>>>>>";;
   '(port, sfd) <- create_sock;;
-  '(b, s) <- execute' 100000000 port ([], (sfd, port, [], [])) m;;
+  '(b, s) <- execute' 10000000 port ([], (sfd, port, [], [])) m;;
   let '(cs, (sfd, _, conns, _)) := s in
   fold_left (fun m fd => OUnix.close fd;; m)
             (map (fst ∘ snd) cs ++ map (fst ∘ fst ∘ snd) conns)
