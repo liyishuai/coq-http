@@ -46,7 +46,7 @@ bug%:
 TIMEOUT?=0
 
 test: TestHttp.native
-	time timeout $(TIMEOUT) ./TestHttp.native 2> client.log
+	time timeout --foreground $(TIMEOUT) ./TestHttp.native 2> client.log
 
 etag-test:
 	curl -X PUT -d Fine localhost:$(PORT)/wat

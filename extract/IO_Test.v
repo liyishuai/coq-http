@@ -1,14 +1,22 @@
 From Coq Require Export
+     Ascii
      ExtrOcamlIntConv
      String.
 From ExtLib Require Export
+     Extras
+     Functor
      Monad.
 From Ceres Require Export
      Ceres.
 From SimpleIO Require Export
+     IO_Float
      IO_Unix
+     IO_Sys
      SimpleIO.
-Export MonadNotation.
+Export
+  FunNotation
+  FunctorNotation
+  MonadNotation.
 Open Scope monad_scope.
 Open Scope string_scope.
 
@@ -22,8 +30,10 @@ Fixpoint multi_test' (fuel : nat) (test : IO bool) : IO bool :=
   match fuel with
   | O => ret true
   | S fuel =>
-    upon_success (print_endline (to_string fuel);;
-                  multi_test' fuel test) test
+    upon_success
+      (curr <- OFloat.to_string <$> OSys.time tt;;
+       print_endline (ostring_app curr (String "009" $ to_string fuel));;
+       multi_test' fuel test) test
   end.
 
 Definition multi_test : IO bool -> IO bool := multi_test' 5000.

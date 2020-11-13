@@ -89,29 +89,35 @@ Definition create_conn (c : clientT) : stateT conn_state IO (option file_descr) 
                  end)).
 
 Notation BUFFER_SIZE := 1024.
-Definition SELECT_TIMEOUT := OFloat.Unsafe.of_string "8e-3".
+Definition SELECT_TIMEOUT := OFloat.Unsafe.of_string "1e-3".
 
-Definition recv_bytes : stateT conn_state IO unit :=
+Definition recv_bytes' : stateT conn_state IO bool :=
   mkStateT
     (fun s =>
        '(fds, _, _) <- select (map (fst ∘ snd) s) [] [] SELECT_TIMEOUT;;
-       s' <- fold_left
-              (fun _s0 fd =>
-                 s0 <- _s0;;
-                 match conn_of_fd fd s0 with
-                 | Some (c, (fd, str0)) =>
-                   buf <- OBytes.create BUFFER_SIZE;;
-                   len <- recv fd buf int_zero BUFFER_SIZE [];;
-                   if len <? int_zero
-                   then close fd;; _s0
-                   else if len =? int_zero
-                     then _s0
-                     else str <- from_ostring <$> OBytes.to_string buf;;
-                          let str1 : string := substring 0 (nat_of_int len) str in
-                          ret $ update c (fd, str0 ++ str1) s0
-                 | None => _s0
-                 end)%int fds (ret s);;
-       ret (tt, s')).
+       fold_left
+         (fun _bs0 fd =>
+            '(b, s0) <- _bs0;;
+            match conn_of_fd fd s0 with
+            | Some (c, (fd, str0)) =>
+              buf <- OBytes.create BUFFER_SIZE;;
+              len <- recv fd buf int_zero BUFFER_SIZE [];;
+              if len <? int_zero
+              then close fd;; _bs0
+              else if len =? int_zero
+                   then _bs0
+                   else str <- from_ostring <$> OBytes.to_string buf;;
+                        let str1 : string := substring 0 (nat_of_int len) str in
+                        ret (true, update c (fd, str0 ++ str1) s0)
+            | None => _bs0
+            end)%int fds (ret (false, s))).
+
+Definition recv_bytes : stateT conn_state IO unit :=
+  mkStateT
+    (IO.fix_io
+       (fun recv_rec s =>
+          '(b, s') <- runStateT recv_bytes' s;;
+          if b : bool then recv_rec s' else ret (tt, s'))).
 
 Instance Serialize__conn : Serialize (file_descr * string) :=
   to_sexp ∘ snd.

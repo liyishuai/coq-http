@@ -261,10 +261,11 @@ CoFixpoint backtrack' {E R} `{Is__tE E} (others : list (itree stE R))
               | None =>
                 match others with
                 | [] =>
-                  (* embed Log ("No more choices, retry receiving");; *)
+                  embed Log ("No more choices, retry receiving from "
+                               ++ to_string src);;
                   Tau (backtrack' [] m)
                 | other :: others' =>
-                  (* embed Log ("Postpone receiving");; *)
+                  embed Log ("Postpone receiving from " ++ to_string src);;
                   Tau (backtrack' (others' ++ [m]) other)
                 end
               end

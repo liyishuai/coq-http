@@ -376,8 +376,10 @@ Fixpoint execute' {R} (fuel : nat) (port : N) (s : tester_state) (m : itree tE R
       | (||le|) =>
         match le in logE Y return (Y -> _) -> _ with
         | Log str =>
-          fun k => prerr_endline ("Tester: " ++ str);;
-                execute' fuel port s (k tt)
+          fun k =>
+            curr <- OFloat.to_string <$> OSys.time tt;;
+            prerr_endline (ostring_app curr (String "009" "Tester: " ++ str));;
+            execute' fuel port s (k tt)
         end k
       | (|||ce) => '(r, s') <- runStateT (client_io port _ ce) s;;
                   execute' fuel port s' (k r)
@@ -397,7 +399,6 @@ Definition execute {R} (m : itree tE R) : IO bool :=
             (map (fst ∘ snd) cs ++ map (fst ∘ fst ∘ snd) conns)
             (OUnix.close sfd);;
   prerr_endline "<<<<<<< end test >>>>>>>";;
-  OFloat.to_string <$> OSys.time tt >>= print_endline;;
   ret b.
 
 Definition test {R} : itree smE R -> IO bool :=
