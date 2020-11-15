@@ -72,42 +72,50 @@ Variant switchE : Type -> Type :=
   Switch__In  : switchE (packetT exp)
 | Switch__Out : packetT exp -> switchE unit.
 
+Lemma filter_length {A} (f : A -> bool) (l : list A) :
+  length (filter f l) <= length l.
+Proof.
+  induction l; simpl; intuition.
+  destruct (f a); simpl; intuition.
+Qed.
+
+Program Fixpoint nodup {A} `{forall x y : A, Decidable (x = y)}
+        (l : list A) {measure (length l)} : list A :=
+  match l with
+  | [] => []
+  | a :: l' => a :: nodup (filter (fun b => negb (a = b?)) l')
+  end.
+Next Obligation.
+  apply le_n_S.
+  apply filter_length.
+Defined.
+
+Fixpoint choose_from_list {E A} `{nondetE -< E} (l : list A)
+  : itree E (option A) :=
+  match l with
+  | []  => ret None
+  | [a] => ret (Some a)
+  | a :: l' => or (ret (Some a)) (choose_from_list l')
+  end.
+
 Definition tcp {E R} `{switchE -< E} `{nondetE -< E} : itree E R :=
-  (rec-fix loop in_pkt0 :=
-     let input :=
-         pkt <- trigger Switch__In;;
-         call (pkt :: in_pkt0) in
-     let output :=
-         '(in_pkt1, out_pkt1, _) <-
-           fold_right
-             (fun pkt i_o_f =>
-                '(in_pkt, out_pkt, f) <- i_o_f;;
-                if f pkt : bool
-                then
-                  or (ret (pkt :: in_pkt, out_pkt,
-                           fun pkt' =>
-                             if (packet__src pkt' = packet__src pkt?) &&&
-                                (packet__dst pkt' = packet__dst pkt?)
-                             then false
-                             else f pkt'))
-                     (ret (in_pkt, pkt :: out_pkt, f))
-                else ret (pkt :: in_pkt, out_pkt, f))
-             (ret ([], [], const true)) in_pkt0;;
-         match out_pkt1 with
-         | _ :: _ =>
-           fold_right (fun pkt r =>
-                         r;;
-                         embed Switch__Out pkt) (ret tt) out_pkt1;;
+  rec
+    (fun in_pkt0 =>
+       let input :=
+           pkt <- trigger Switch__In;;
+           call (in_pkt0 ++ [pkt]) in
+       let conns : list connT := nodup (map packet__src in_pkt0) in
+       out <- choose_from_list conns;;
+       match out with
+       | None => input
+       | Some c =>
+         match pick (fun p => packet__src p = c?) in_pkt0 with
+         | None => input         (* should not happen *)
+         | Some (p, in_pkt1) =>
+           embed Switch__Out p;;
            call in_pkt1
-         | [] =>
-           match rev' in_pkt1 with
-           | [] => input
-           | pkt :: in_pkt2 =>
-             embed Switch__Out pkt;;
-             call (rev' in_pkt2)
-           end
-         end in
-     or input output) [].
+         end
+       end) ([] : list (packetT exp)).
 
 Variant netE : Type -> Type :=
   Net__In  : server_state exp -> connT -> netE (packetT exp)
