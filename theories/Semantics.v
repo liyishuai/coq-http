@@ -279,11 +279,12 @@ Definition if_none_match : Monads.stateT (server_state exp) (itree E) unit :=
                   (fun mb t =>
                      b <- mb;;
                      if b : bool
-                     then negb <$> embed (@Sym__Decide exp) (Exp__Match t tx true)
-                     else ret false) ts (ret true);;
+                     then ret true
+                     else embed (@Sym__Decide exp) (Exp__Match t tx true))
+                  ts (ret false);;
           if b
-          then accept st'
-          else reject st'
+          then reject st'
+          else accept st'
           | Some None | None => accept st'
           end
         end

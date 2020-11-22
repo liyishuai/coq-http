@@ -1,6 +1,5 @@
 From SimpleIO Require Export
      IO_Float
-     IO_Sys
      IO_Random.
 From HTTP Require Export
      NetUnix
@@ -134,9 +133,12 @@ Definition random_request (origin_port : N) (s : server_state exp) (es : exp_sta
     str0 <- gen_string;;
     let str1 : string := p ++ ": " ++ str0 in
     tag_field <- io_or (t <- gen_etag p s es;;
-                       io_or
+                       match m with
+                       | Method__GET | Method__HEAD => io_or
                          (ret [@Field id "If-Match" (t : field_value)])
-                         (ret [@Field id "If-None-Match" (t : field_value)]))
+                         (ret [@Field id "If-None-Match" (t : field_value)])
+                       | _ => ret [@Field id "If-Match" (t : field_value)]
+                       end)
                       (ret []);;
     ret (Request
            l (tag_field
@@ -185,8 +187,12 @@ Definition gen_request' (p : path) (s : server_state exp)
 Definition gen_request (port : N) (s : server_state exp) (es : exp_state)
   : IO http_request :=
   p <- gen_path s;;
-  gen_request' p s es.
-  (* io_or (gen_request' p s es) (random_request port s es). *)
+  io_or (gen_request' p s es) (random_request port s es).
+
+Definition ok (s : string) : state (server_state id) (http_response id) :=
+  ret (Response (status_line_of_code 200)
+                [@Field id "Content-Length" $ to_string $ String.length s]
+                (Some s)).
 
 Definition not_modified
   : state (server_state id) (http_response id) :=
@@ -288,7 +294,7 @@ Definition execute_request (req : http_request)
          let 'URI s a p oq := u in
          match methd with
          | Method__GET =>
-           runState forbidden ss
+           runState (ok "It works!") ss
          | Method__PUT
          | _ => runState method_not_allowed ss
          end
@@ -377,7 +383,7 @@ Fixpoint execute' {R} (fuel : nat) (port : N) (s : tester_state) (m : itree tE R
         match le in logE Y return (Y -> _) -> _ with
         | Log str =>
           fun k =>
-            curr <- OFloat.to_string <$> OSys.time tt;;
+            curr <- OFloat.to_string <$> OUnix.gettimeofday tt;;
             prerr_endline (ostring_app curr (String "009" "Tester: " ++ str));;
             execute' fuel port s (k tt)
         end k
@@ -387,13 +393,10 @@ Fixpoint execute' {R} (fuel : nat) (port : N) (s : tester_state) (m : itree tE R
     end
   end.
 
-Parameter time : unit -> IO float.
-Extract Constant time => "fun t k -> k (Sys.time t)".
-
 Definition execute {R} (m : itree tE R) : IO bool :=
   prerr_endline "<<<<< begin test >>>>>>>";;
   '(port, sfd) <- create_sock;;
-  '(b, s) <- execute' 10000000 port ([], (sfd, port, [], [])) m;;
+  '(b, s) <- execute' 5000 port ([], (sfd, port, [], [])) m;;
   let '(cs, (sfd, _, conns, _)) := s in
   fold_left (fun m fd => OUnix.close fd;; m)
             (map (fst ∘ snd) cs ++ map (fst ∘ fst ∘ snd) conns)

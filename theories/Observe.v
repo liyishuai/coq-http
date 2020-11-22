@@ -121,14 +121,14 @@ Definition liftState {S A} {F : Type -> Type} `{Functor F} (aF : F A)
   : Monads.stateT S F A :=
   fun s : S => pair s <$> aF.
 
-Definition logger {E R} `{Is__oE E} (m : itree oE R)
+Definition logger__o {E R} `{Is__oE E} (m : itree oE R)
   : Monads.stateT (list traceT) (itree E) R :=
   interp
     (fun _ e =>
        match e with
        | (Throw err|) =>
          fun s =>
-           (* embed Log ("Failing trace: " ++ CRLF ++ list_to_string (rev' s));; *)
+           embed Log ("Failing trace: " ++ CRLF ++ list_to_string (rev' s));;
            throw err
        | (||||e) =>
          match e in observeE Y return Monads.stateT _ _ Y with
@@ -143,8 +143,9 @@ Definition logger {E R} `{Is__oE E} (m : itree oE R)
          end
        | (|e|)
        | (||e|)
-       | (|||e|) => @liftState (list traceT) _ (itree _) _ (trigger e)
+       | (|||e|) => liftState $ trigger e
        end%string) m.
 
 Definition observer {E R} `{Is__oE E} (m : itree nE R) : itree E R :=
-  snd <$> logger (observer' m) [].
+  (* snd <$> logger__o (observer' m) []. *)
+  observer' m.

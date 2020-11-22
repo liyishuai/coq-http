@@ -11,7 +11,6 @@ From Ceres Require Export
 From SimpleIO Require Export
      IO_Float
      IO_Unix
-     IO_Sys
      SimpleIO.
 Export
   FunNotation
@@ -31,7 +30,7 @@ Fixpoint multi_test' (fuel : nat) (test : IO bool) : IO bool :=
   | O => ret true
   | S fuel =>
     upon_success
-      (curr <- OFloat.to_string <$> OSys.time tt;;
+      (curr <- OFloat.to_string <$> OUnix.gettimeofday tt;;
        print_endline (ostring_app curr (String "009" $ to_string fuel));;
        multi_test' fuel test) test
   end.

@@ -30,7 +30,9 @@ Definition assert (w : bool) (x : var) (v : field_value)(s : exp_state)
   let '(n, bs, es) := s in
   let fx  := get x es in
   let err := inl $ "Expect " ++ to_string fx
-                 ++ ", but observed " ++ to_string v in
+                 ++ ", but observed " ++ to_string v
+                 ++ ", under " ++ (if w then "weak" else "strong")
+                 ++ " comparison" in
   match fx with
   | Some (inl e)  => if etag_match w e v then inr s else err
   | Some (inr ts) => if existsb (String.eqb v) ts
@@ -65,7 +67,7 @@ Definition unify {T} (e : exp T) (v : T) (s : exp_state) : string + exp_state :=
       | Some None     => err v
       | None          => inr (n, put x (Some v) bs, es)
       end
-  | Exp__ETag x => assert false x
+  | Exp__ETag x => assert true x
   | Exp__Match f (Exp__ETag x) w =>
     fun v => if v then assert w x f else assert_not w x f
   | Exp__Match _ _ _ => fun v _ => err v
@@ -130,9 +132,12 @@ Definition instantiate_unify {E A} `{Is__stE E} (e : unifyE A)
                  ++ " but observed " ++ status_to_string st
                  ++ ", under state " ++ to_string s
     | Unify__Match bx b =>
-      (* embed Log ("Unifying " ++ to_string bx ++ " against " ++ to_string b);; *)
+      (* embed Log ("Unifying " ++ to_string bx ++ " against " ++ to_string b *)
+      (*                        ++ ", under state " ++ to_string xs);; *)
       match unify bx b xs with
-      | inr s1  => Ret (s1, ps, tt)
+      | inr s1  =>
+        (* embed Log ("Unification successful: " ++ to_string s1);; *)
+        Ret (s1, ps, tt)
       | inl err => throw $ "Unify If-Match failed: " ++ err
       end
     | Unify__Proxy cx c0 =>
@@ -173,7 +178,7 @@ Definition instantiate_observe {E A} `{Is__stE E} (e : observeE A)
       Ret (s, pkt)
     end.
 
-Definition unifier {E R} `{Is__stE E} (m : itree oE R)
+Definition unifier' {E R} `{Is__stE E} (m : itree oE R)
   : Monads.stateT unify_state (itree E) R :=
   interp (fun _ e =>
             match e with
@@ -186,6 +191,34 @@ Definition unifier {E R} `{Is__stE E} (m : itree oE R)
             | (|e|)
             | (|||e|) => @liftState unify_state _ (itree _) _ (trigger e)
             end) m.
+
+Definition logger__st {E R} `{Is__stE E} (m : itree stE R)
+  : Monads.stateT (list traceT) (itree E) R :=
+  interp
+    (fun _ e =>
+       match e with
+       | (Throw err|) =>
+         fun s =>
+           embed Log ("Failing trace: " ++ CRLF ++ list_to_string (rev' s));;
+           throw err
+       | (|||e) =>
+         match e in testerE Y return Monads.stateT _ _ Y with
+         | Tester__Recv c =>
+           fun s =>
+             pkt <- embed Tester__Recv c;;
+             ret (Trace__In  pkt::s, pkt)
+         | Tester__Send ss c es =>
+           fun s =>
+             pkt <- embed Tester__Send ss c es;;
+             ret (Trace__Out pkt::s, pkt)
+         end
+       | (|e|)
+       | (||e|) => liftState $ trigger e
+       end) m.
+
+Definition unifier {E R} `{Is__stE E} (m : itree oE R) : itree E R :=
+  (* snd <$> logger__st (snd <$> unifier' m (0, [], [], [])) []. *)
+  snd <$> unifier' m (0, [], [], []).
 
 CoFixpoint match_event {T R} (e0 : testerE R) (r : R) (m : itree stE T)
   : itree stE T :=
@@ -261,11 +294,11 @@ CoFixpoint backtrack' {E R} `{Is__tE E} (others : list (itree stE R))
               | None =>
                 match others with
                 | [] =>
-                  embed Log ("No more choices, retry receiving from "
-                               ++ to_string src);;
+                  (* embed Log ("No more choices, retry receiving from " *)
+                  (*              ++ to_string src);; *)
                   Tau (backtrack' [] m)
                 | other :: others' =>
-                  embed Log ("Postpone receiving from " ++ to_string src);;
+                  (* embed Log ("Postpone receiving from " ++ to_string src);; *)
                   Tau (backtrack' (others' ++ [m]) other)
                 end
               end
@@ -276,5 +309,5 @@ CoFixpoint backtrack' {E R} `{Is__tE E} (others : list (itree stE R))
 Definition backtrack {E R} `{Is__tE E} : itree stE R -> itree E R :=
   backtrack' [].
 
-Definition tester {E R} `{Is__tE E} (mo : itree oE R) : itree E R :=
-  backtrack $ snd <$> unifier mo (0, [], [], []).
+Definition tester {E R} `{Is__tE E} : itree oE R -> itree E R :=
+  backtrack ∘ unifier.
