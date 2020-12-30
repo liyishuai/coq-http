@@ -383,7 +383,7 @@ Fixpoint execute' {R} (fuel : nat) (port : N) (s : tester_state) (m : itree tE R
         match le in logE Y return (Y -> _) -> _ with
         | Log str =>
           fun k =>
-            curr <- OFloat.to_string <$> OUnix.gettimeofday tt;;
+            curr <- OFloat.to_string <$> OUnix.gettimeofday;;
             prerr_endline (ostring_app curr (String "009" "Tester: " ++ str));;
             execute' fuel port s (k tt)
         end k

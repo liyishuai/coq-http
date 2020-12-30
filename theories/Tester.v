@@ -50,7 +50,9 @@ Definition assert_not (w : bool) (x : var) (v : field_value) (s : exp_state)
                  ++ ", but observed " ++ to_string v in
   match fx with
   | Some (inl e) => if etag_match w e v then err else inr s
-  | Some (inr ts) => inr (n, bs, put x (inr (v :: ts)) es)
+  | Some (inr ts) => if existsb (String.eqb v) ts
+                    then inr s
+                    else inr (n, bs, put x (inr (v :: ts)) es)
   | None          => inr (n, bs, put x (inr [v]) es)
   end.
 
