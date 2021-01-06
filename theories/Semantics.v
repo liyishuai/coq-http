@@ -115,7 +115,6 @@ Definition send_code (sc : status_code) (fs : list (field_line exp))
 
 
 Definition ok (ot : option (exp field_value)) (m : exp message_body) :=
-  or (send_code 200 [] (Some m);; ret None)
      (t <- match ot with
           | Some t => ret t
           | None => embed (@Sym__NewETag exp)
@@ -187,7 +186,7 @@ Definition http_smi_put_body'
     | Some None     => created
     | None          => or created no_content
     end;;
-    ot <- or (Some <$> embed (@Sym__NewETag exp)) (ret None);;
+    ot <- Some <$> embed (@Sym__NewETag exp);;
     ret (update p (Some (ResourceState (Exp__Const m) ot)) st, tt)
   | None => bad_request;; ret (st, tt)
   end.
@@ -201,8 +200,7 @@ Definition getResource
       r <- or (ret None)
              (Some <$>
                    liftA2 ResourceState (embed (@Sym__NewBody exp))
-                   (or (ret None)
-                       (Some <$> embed (@Sym__NewETag exp))));;
+                       (Some <$> embed (@Sym__NewETag exp)));;
       ret (update p r st, r)
     end.
 

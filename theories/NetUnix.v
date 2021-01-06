@@ -176,13 +176,14 @@ Definition send_request (c : clientT) (req : http_request) : stateT conn_state I
              sent <- send fd buf o (len - o)%int [];;
              if sent <? int_zero
              then close fd;;
-                  prerr_endline "Send byte failed";;
+                  (* prerr_endline "Send byte failed";; *)
                   ret false
              else
                if o + sent =? len
-               then prerr_endline ("================SENT================"
-                                     ++ to_string c ++ CRLF ++ str);;
-                    ret true
+               then
+                 (* prerr_endline ("================SENT================" *)
+                 (*                     ++ to_string c ++ CRLF ++ str);; *)
+                 ret true
                else send_rec (o + sent))%int int_zero;;
         ret (b, s)
   in
@@ -213,10 +214,11 @@ Definition send_response (c : clientT) (res : http_response id) : stateT origin_
                   then ret false
                   else
                     if o + sent =? len
-                    then prerr_endline ("=============PROXY SENT============="
-                                          ++ to_string c
-                                          ++ CRLF ++ str);;
-                         ret true
+                    then
+                      (* prerr_endline ("=============PROXY SENT=============" *)
+                      (*                  ++ to_string c *)
+                      (*                  ++ CRLF ++ str);; *)
+                      ret true
                     else send_rec (o + sent))%int int_zero;;
          ret (b, s)
        | None => ret (false, s)

@@ -19,8 +19,10 @@ Fixpoint findResponse (s : conn_state)
     | inl None => '(op, t') <- findResponse t;;
                  ret (op, cfs :: t')
     | inr (r, str') =>
-      prerr_endline ("==============RECEIVED=============="
-                       ++ to_string c ++ CRLF ++ response_to_string r);;
+      (* curr <- OFloat.to_string <$> OUnix.gettimeofday;; *)
+      (* prerr_endline curr;; *)
+      (* prerr_endline ("==============RECEIVED==============" *)
+      (*                  ++ to_string c ++ CRLF ++ response_to_string r);; *)
       ret (Some (Packet Conn__Server (Conn__User c) (inr r)), (c, (f, str')) :: t)
     end
   end.
@@ -42,9 +44,9 @@ Fixpoint findRequest'
       | inl None => '(or, t') <- findRequest' t;;
                    ret (or, conn :: t')
       | inr (r, str') =>
-        prerr_endline ("===========PROXY RECEIVED==========="
-                         ++ to_string c
-                         ++ CRLF ++ request_to_string r);;
+        (* prerr_endline ("===========PROXY RECEIVED===========" *)
+        (*                  ++ to_string c *)
+        (*                  ++ CRLF ++ request_to_string r);; *)
         ret (Some (c, r), (c, (fd, str', Some r)) :: t)
       end
     end.
@@ -122,6 +124,7 @@ Definition random_request (origin_port : N) (s : server_state exp) (es : exp_sta
   : IO http_request :=
   m <- io_or (ret Method__GET) (ret Method__PUT);;
   p <- gen_path s;;
+  (* let a := Authority None "localhost" (Some server_port) in *)
   a <- io_or (ret $ Authority None "localhost" (Some server_port))
             (ret $ Authority None "host.docker.internal" (Some origin_port));;
   let uri : absolute_uri :=
@@ -155,20 +158,22 @@ Definition gen_request' (p : path) (s : server_state exp)
   | Some (Some _) =>
     str0 <- gen_string;;
     t <- gen_etag p s es;;
-    io_or (
-    let l : request_line :=
-        RequestLine Method__PUT (RequestTarget__Origin p None) (Version 1 1) in
-    let str1 : string := p ++ ": " ++ str0 in
-    ret (Request
-           l [Field "Host" $ "localhost:" ++ port;
-             Field "Content-Length" (to_string $ String.length str1);
-             Field "If-Match" (t : field_value)]
-           (Some str1) : http_request)
-      ) (let l : request_line :=
-             RequestLine Method__GET (RequestTarget__Origin p None) (Version 1 1) in
-         ret (Request
-                l [Field "Host" $ "localhost:" ++ port;
-                  Field "If-None-Match" (t : field_value)] None : http_request))
+    tag_field <-
+    io_or (ret [])
+          (io_or (ret [@Field id "IF-Match" (t : field_value)])
+                 (ret [@Field id "If-None-Match" t]));;
+    io_or
+      (let l : request_line :=
+           RequestLine Method__PUT (RequestTarget__Origin p None) (Version 1 1) in
+       let str1 : string := p ++ ": " ++ str0 in
+       ret (Request
+              l ([Field "Host" $ "localhost:" ++ port;
+                 Field "Content-Length" (to_string $ String.length str1)]
+                   ++ tag_field) (Some str1)))
+      (let l : request_line :=
+           RequestLine Method__GET (RequestTarget__Origin p None) (Version 1 1) in
+       ret (Request
+              l ((Field "Host" $ "localhost:" ++ port)::tag_field) None))
   | Some None
   | None =>
     io_or (let l : request_line :=
@@ -313,17 +318,22 @@ Definition gen_response (ss : server_state exp) (es : exp_state)
        | _ => (Response (status_line_of_code 403) [] None, os)
        end).
 
-Definition client_io (port : N) : clientE ~> stateT tester_state IO :=
+Definition client_io (port : N) : clientE ~> stateT (tester_state * nat) IO :=
   fun _ ce =>
     match ce with
     | Client__Recv src =>
       mkStateT
         (fun s0 =>
-           let '(cs, os0) := s0 in
+           let '(cs, os0, n) := s0 in
            let recv_client os :=
                '(op, cs') <- execStateT recv_bytes cs >>= findResponse;;
                (* prerr_endline ("Client received " ++ to_string op);; *)
-               ret (op, (cs', os)) in
+               let n' : nat :=
+                   match op with
+                   | Some _ => S n
+                   | None   => n
+                   end in
+               ret (op, (cs', os, n')) in
            match src with
            | Conn__Proxy _ =>
              '(ocr, os1) <- execStateT recv_bytes_origin os0 >>= findRequest;;
@@ -332,7 +342,7 @@ Definition client_io (port : N) : clientE ~> stateT tester_state IO :=
                (* prerr_endline ("Proxy received " ++ to_string p);; *)
                ret (Some (Packet (Conn__Proxy c)
                                  (Conn__Authority $ originAuthority port)
-                                 (inl r)), (cs, os1))
+                                 (inl r)), (cs, os1, S n))
              | None => recv_client os1
              end
            | _ => recv_client os0
@@ -340,69 +350,69 @@ Definition client_io (port : N) : clientE ~> stateT tester_state IO :=
     | Client__Send ss dst es =>
       mkStateT
         $ fun s0 =>
-            let '(cs, os) := s0 in
+            let '(cs, os, n) := s0 in
             match dst with
             | Conn__Proxy c =>
               let (res, os1) := runState (gen_response ss es c) os in
               '(b, os2) <- runStateT (send_response c res) os1;;
               ret (if b : bool
-                   then Some $ Packet (Conn__Authority $ originAuthority port)
-                             dst $ inr res
-                   else None, (cs, os2))
+                   then (Some $ Packet (Conn__Authority $ originAuthority port)
+                             dst $ inr res, (cs, os2, S n))
+                   else (None, (cs, os2, n)))
             | Conn__Server =>
               req <- gen_request port ss es;;
               let cids : list clientT := map fst cs in
               c <- io_choose 1%nat (S (length cs) :: cids ++ cids ++ cids ++ cids);;
               '(b, cs1) <- runStateT (send_request c req) cs;;
               ret (if b : bool
-                   then Some $ Packet (Conn__User c) Conn__Server $ inl req
-                   else None, (cs1, os))
+                   then (Some $ Packet (Conn__User c) Conn__Server $ inl req, (cs1, os, S n))
+                   else (None, (cs1, os, n)))
             | _ => failwith ""
             end
     end.
 
-Fixpoint execute' {R} (fuel : nat) (port : N) (s : tester_state) (m : itree tE R)
-  : IO (bool * tester_state) :=
+Fixpoint execute' {R} (fuel : nat) (port : N) (s : tester_state) (n : nat) (m : itree tE R)
+  : IO (bool * tester_state * nat) :=
   match fuel with
-  | O => ret (true, s)
+  | O => ret (true, s, n)
   | S fuel =>
     match observe m with
-    | RetF _  => ret (true, s)
-    | TauF m' => execute' fuel port s m'
+    | RetF _  => ret (true, s, n)
+    | TauF m' => execute' fuel port s n m'
     | VisF e k =>
       match e with
-      | (Throw err|) => prerr_endline err;; ret (false, s)
+      | (Throw err|) => (* prerr_endline err;;  *)ret (false, s, n)
       | (|ne|) =>
         match ne in nondetE Y return (Y -> _) -> _ with
         | Or =>
           fun k =>
             b <- ORandom.bool tt;;
-            execute' fuel port s (k b)
+            execute' fuel port s n (k b)
         end k
       | (||le|) =>
         match le in logE Y return (Y -> _) -> _ with
         | Log str =>
           fun k =>
-            curr <- OFloat.to_string <$> OUnix.gettimeofday;;
-            prerr_endline (ostring_app curr (String "009" "Tester: " ++ str));;
-            execute' fuel port s (k tt)
+            (* curr <- OFloat.to_string <$> OUnix.gettimeofday;; *)
+            (* prerr_endline (ostring_app curr (String "009" "Tester: " ++ str));; *)
+            execute' fuel port s n (k tt)
         end k
-      | (|||ce) => '(r, s') <- runStateT (client_io port _ ce) s;;
-                  execute' fuel port s' (k r)
+      | (|||ce) => '(r, (s', n')) <- runStateT (client_io port _ ce) (s, n);;
+                  execute' fuel port s' n' (k r)
       end
     end
   end.
 
-Definition execute {R} (m : itree tE R) : IO bool :=
-  prerr_endline "<<<<< begin test >>>>>>>";;
+Definition execute {R} (m : itree tE R) : IO (bool * nat) :=
+  (* prerr_endline "<<<<< begin test >>>>>>>";; *)
   '(port, sfd) <- create_sock;;
-  '(b, s) <- execute' 5000 port ([], (sfd, port, [], [])) m;;
+  '(b, s, n) <- execute' 5000 port ([], (sfd, port, [], [])) O m;;
   let '(cs, (sfd, _, conns, _)) := s in
   fold_left (fun m fd => OUnix.close fd;; m)
             (map (fst ∘ snd) cs ++ map (fst ∘ fst ∘ snd) conns)
             (OUnix.close sfd);;
-  prerr_endline "<<<<<<< end test >>>>>>>";;
-  ret b.
+  (* prerr_endline "<<<<<<< end test >>>>>>>";; *)
+  ret (b, n).
 
-Definition test {R} : itree smE R -> IO bool :=
+Definition test {R} : itree smE R -> IO (bool * nat) :=
   execute ∘ tester ∘ observer ∘ compose_switch tcp.
