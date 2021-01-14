@@ -1,5 +1,6 @@
 COQMAKEFILE?=Makefile.coq
 EXE?=TestHttp.native
+INSTALLDIR?=$(shell opam var bin)
 
 all: $(COQMAKEFILE)
 	@+$(MAKE) -f $^ $@
@@ -10,11 +11,11 @@ test: all
 
 install: $(COQMAKEFILE)
 	@+$(MAKE) -f $^ $@
-	install extract/$(EXE) `opam var bin`
+	install extract/$(EXE) $(INSTALLDIR)
 
 uninstall: $(COQMAKEFILE)
 	@+$(MAKE) -f $^ $@
-	@rm -f `opam var bin`/$(EXE)
+	@rm -f $(INSTALLDIR)/$(EXE)
 
 clean: $(COQMAKEFILE)
 	@+$(MAKE) -f $^ cleanall
