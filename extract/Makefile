@@ -28,7 +28,7 @@ CPORT?=80
 
 server: stop
 	if [ $$(which docker) ]; \
-		then docker pull $(SERVER) || true; \
+		then \
 		     docker run -d --name $@ -p $(PORT):$(CPORT) $(SERVER); \
 		else echo Docker not found; \
 		     exit 1; \
@@ -40,13 +40,10 @@ py:
 hs:
 	$(MAKE) server CPORT=31081 SERVER=ysli/http-proxy
 
-bug%:
+bug%: TestHttp.native
 	$(MAKE) server SERVER=ysli/apache:$@
-
-TIMEOUT?=0
-
-test: TestHttp.native
-	time timeout --foreground $(TIMEOUT) ./TestHttp.native 2> client.csv
+	sleep 1
+	./TestHttp.native 2> data/$@.csv
 
 etag-test:
 	curl -X PUT -d Fine localhost:$(PORT)/wat

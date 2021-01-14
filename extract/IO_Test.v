@@ -43,7 +43,7 @@ Definition upon_success (handler test : IO bool) : IO bool :=
 
 Fixpoint multi_test' (fuel : nat) (test : IO (bool * nat)) : IO nat :=
   match fuel with
-  | O => ret 5000
+  | O => prerr_endline "Out of fuel";; ret O
   | S fuel =>
     '(b, n) <- test;;
     if b : bool

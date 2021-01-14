@@ -84,7 +84,7 @@ Fixpoint gen_many {A} (n : nat) (ma : IO A) : IO (list A) :=
   end.
 
 Definition gen_string : IO string :=
-  String "~" ∘ String.concat "" <$> gen_many 1 gen_string'.
+  String "~" ∘ String.concat "" <$> gen_many 3 gen_string'.
 
 Definition gen_path (s : server_state exp) : IO path :=
   let paths : list path := map fst s in
