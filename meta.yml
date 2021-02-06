@@ -25,12 +25,25 @@ dependencies:
   - description: '[OCamlbuild](https://github.com/ocaml/ocamlbuild)'
     opam:
       name: ocamlbuild
+      version: '{ >= "0.14.0" }'
   - description: '[ITreeIO](https://github.com/Lysxia/coq-itree-io)'
     opam:
       name: coq-itree-io
+      version: '{ >= "0.1.0" }'
   - description: '[Parsec](https://github.com/liyishuai/coq-parsec)'
     opam:
       name: coq-parsec
+      version: '{ >= "0.1.0" }'
+test_target: test
+install_flag: INSTALLDIR=%{bin}%
+categories:
+  - name: Computer Science/Concurrent Systems and Protocols/Correctness of specific protocols
+  - name: Miscellaneous/Extracted Programs/Decision procedures
+keywords:
+  - name: co-induction
+  - name: extraction
+  - name: reactive systems
+date: 2021-01-14
 namespace: HTTP
 opam-file-maintainer: 'Yishuai Li <yishuai@cis.upenn.edu>'
 supported_coq_versions:
@@ -39,6 +52,7 @@ supported_coq_versions:
 tested_coq_opam_versions:
   - version: 'dev'
   - version: '8.12'
+  - version: '8.13'
 publications:
   - pub_title: >
       From C to Interaction Trees:
