@@ -42,7 +42,7 @@ Fixpoint is_trace' {R} (fuel : nat) (m : itree stE R) (l : list traceT)
         | [] => Some (inr None)
         | h::l =>
           match te in testerE Y return (Y -> _) -> _ with
-          | Tester__Recv _ =>
+          | Tester__Recv =>
             fun k =>
               match h with
               | Trace__In pkt => is_trace' fuel (k pkt) l
@@ -107,7 +107,7 @@ Fixpoint accepts' {R} (fuel : nat) (m : itree tE R) (l : list traceT)
         | [] => Some (inr None)
         | h::l' =>
           match ce in clientE Y return (Y -> _) -> _ with
-          | Client__Recv _ =>
+          | Client__Recv =>
             fun k =>
               match h with
               | Trace__In pkt => accepts' fuel (k $ Some pkt) l'

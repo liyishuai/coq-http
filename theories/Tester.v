@@ -78,7 +78,7 @@ Definition unify {T} (e : exp T) (v : T) (s : exp_state) : string + exp_state :=
 Definition unify_state : Set := exp_state * list (clientT * clientT).
 
 Variant testerE : Type -> Type :=
-  Tester__Recv : connT -> testerE (packetT id)
+  Tester__Recv : testerE (packetT id)
 | Tester__Send : server_state exp -> connT ->
                exp_state -> testerE (packetT id).
 
@@ -175,8 +175,8 @@ Definition instantiate_observe {E A} `{Is__stE E} (e : observeE A)
             end;;
       pkt <- embed Tester__Send st dst xs;;
       Ret (s, pkt)
-    | Observe__FromServer src =>
-      pkt <- embed Tester__Recv src;;
+    | Observe__FromServer =>
+      pkt <- embed Tester__Recv;;
       Ret (s, pkt)
     end.
 
@@ -205,9 +205,9 @@ Definition logger__st {E R} `{Is__stE E} (m : itree stE R)
            throw err
        | (|||e) =>
          match e in testerE Y return Monads.stateT _ _ Y with
-         | Tester__Recv c =>
+         | Tester__Recv =>
            fun s =>
-             pkt <- embed Tester__Recv c;;
+             pkt <- embed Tester__Recv;;
              ret (Trace__In  pkt::s, pkt)
          | Tester__Send ss c es =>
            fun s =>
@@ -232,7 +232,7 @@ CoFixpoint match_event {T R} (e0 : testerE R) (r : R) (m : itree stE T)
     | (|||oe) =>
       match oe in testerE Y, e0 in testerE R return (Y -> _) -> R -> _ with
       | Tester__Send _ _ _, Tester__Send _ _ _
-      | Tester__Recv _    , Tester__Recv _ => id
+      | Tester__Recv      , Tester__Recv => id
       | _, _ => fun _ _ => throw "Unexpected event"
       end k r
     | _ => vis e (match_event e0 r ∘ k)
@@ -243,7 +243,7 @@ Definition match_observe {T R} (e : testerE T) (r : T) (l : list (itree stE R))
   : list (itree stE R) := map (match_event e r) l.
 
 Variant clientE : Type -> Type :=
-| Client__Recv : connT -> clientE (option (packetT id))
+| Client__Recv : clientE (option (packetT id))
 | Client__Send : server_state exp -> connT -> exp_state ->
                clientE (option (packetT id)).
 
@@ -288,11 +288,11 @@ CoFixpoint backtrack' {E R} `{Is__tE E} (others : list (itree stE R))
                                                   pkt others) (k pkt))
               | None => catch "Not ready to send"
               end
-      | Tester__Recv src =>
-        fun k => opkt <- embed Client__Recv src;;
+      | Tester__Recv =>
+        fun k => opkt <- embed Client__Recv;;
               match opkt with
               | Some pkt =>
-                Tau (backtrack' (match_observe (Tester__Recv src) pkt others) (k pkt))
+                Tau (backtrack' (match_observe Tester__Recv pkt others) (k pkt))
               | None =>
                 match others with
                 | [] =>

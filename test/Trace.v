@@ -5,7 +5,7 @@ Definition tester_send {E} `{testerE -< E} : itree E (packetT id) :=
   embed Tester__Send [] Conn__Server (0, [], []).
 
 Definition tester_recv {E} `{testerE -< E} : itree E (packetT id) :=
-  embed Tester__Recv Conn__Server.
+  trigger Tester__Recv.
 
 Definition same_status_code (p0 p1 : payloadT id) : bool :=
   match p0, p1 with

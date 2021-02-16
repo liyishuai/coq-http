@@ -15,7 +15,7 @@ Definition wrap_packet (pkt : packetT id) : packetT exp :=
 
 Variant observeE : Type -> Type :=
   Observe__ToServer   : server_state exp -> connT -> observeE (packetT id)
-| Observe__FromServer : connT -> observeE (packetT id).
+| Observe__FromServer : observeE (packetT id).
 
 Variant decideE : Type -> Set :=
   Decide : decideE bool.
@@ -39,7 +39,7 @@ Definition dualize {E R} `{Is__oE E} (e : netE R) : itree E R :=
   match e in netE R return _ R with
   | Net__In st c => wrap_packet <$> embed Observe__ToServer st c
   | Net__Out (Packet s0 d0 p0) =>
-    pkt <- embed Observe__FromServer s0;;
+    pkt <- embed Observe__FromServer;;
     let '(Packet s d p) := pkt in
     match s0, s with
     | Conn__Proxy c0, Conn__Proxy c =>
@@ -136,9 +136,9 @@ Definition logger__o {E R} `{Is__oE E} (m : itree oE R)
            fun s =>
              pkt <- embed Observe__ToServer ss c;;
              ret (Trace__In  pkt::s, pkt)
-         | Observe__FromServer c =>
+         | Observe__FromServer =>
            fun s =>
-             pkt <- embed Observe__FromServer c;;
+             pkt <- embed Observe__FromServer;;
              ret (Trace__Out pkt::s, pkt)
          end
        | (|e|)

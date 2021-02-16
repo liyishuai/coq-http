@@ -321,7 +321,7 @@ Definition gen_response (ss : server_state exp) (es : exp_state)
 Definition client_io (port : N) : clientE ~> stateT (tester_state * nat) IO :=
   fun _ ce =>
     match ce with
-    | Client__Recv src =>
+    | Client__Recv =>
       mkStateT
         (fun s0 =>
            let '(cs, os0, n) := s0 in
@@ -334,8 +334,6 @@ Definition client_io (port : N) : clientE ~> stateT (tester_state * nat) IO :=
                    | None   => n
                    end in
                ret (op, (cs', os, n')) in
-           match src with
-           | Conn__Proxy _ =>
              '(ocr, os1) <- execStateT recv_bytes_origin os0 >>= findRequest;;
              match ocr with
              | Some (c, r) =>
@@ -344,9 +342,7 @@ Definition client_io (port : N) : clientE ~> stateT (tester_state * nat) IO :=
                                  (Conn__Authority $ originAuthority port)
                                  (inl r)), (cs, os1, S n))
              | None => recv_client os1
-             end
-           | _ => recv_client os0
-           end)
+             end)
     | Client__Send ss dst es =>
       mkStateT
         $ fun s0 =>
