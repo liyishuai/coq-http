@@ -281,12 +281,22 @@ CoFixpoint backtrack' {E R} `{Is__tE E} (others : list (itree stE R))
     | (|||te) =>
       match te in testerE Y return (Y -> _) -> _ with
       | Tester__Send st oh es =>
-        fun k => opkt <- embed Client__Send st oh es;;
-              match opkt with
-              | Some pkt =>
-                Tau (backtrack' (match_observe (Tester__Send st oh es)
-                                                  pkt others) (k pkt))
-              | None => catch "Not ready to send"
+        fun k => op1 <- trigger Client__Recv;;
+              match op1 with
+              | Some p1 =>
+                match match_observe Tester__Recv p1 others with
+                | [] => throw "Unexpected receive from server"
+                | other :: others' =>
+                  Tau (backtrack' others' other)
+                end
+              | None =>
+                opkt <- embed Client__Send st oh es;;
+                match opkt with
+                | Some pkt =>
+                  Tau (backtrack' (match_observe (Tester__Send st oh es)
+                                                 pkt others) (k pkt))
+                | None => catch "Not ready to send"
+                end
               end
       | Tester__Recv =>
         fun k => opkt <- embed Client__Recv;;
