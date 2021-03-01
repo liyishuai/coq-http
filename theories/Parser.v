@@ -281,7 +281,7 @@ Definition parseBody (fs : list (field_line id))
   end%string.
 
 (** https://httpwg.org/http-core/draft-ietf-httpbis-messaging-latest.html#rfc.section.2.1 *)
-Definition parseRequest : parser http_request :=
+Definition parseRequest : parser (http_request id) :=
   l <- parseRequestLine;;
   parseCRLF;;
   f <- parseFieldLines;;

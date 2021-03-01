@@ -109,7 +109,7 @@ Definition body_to_string (ob : option message_body) : string :=
   | None   => ""
   end.
 
-Definition request_to_string (r : http_request) : string :=
+Definition request_to_string (r : http_request id) : string :=
   let 'Request l fs ob := r in
   line_to_string l ++ CRLF ++
   fields_to_string fs ++ CRLF ++

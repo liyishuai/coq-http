@@ -7,7 +7,7 @@ Export SumNotations.
 Open Scope nat_scope.
 Open Scope sum_scope.
 
-Definition payloadT exp_ : Type := http_request + http_response exp_.
+Definition payloadT exp_ : Type := http_request id + http_response exp_.
 
 Variant connT :=
   Conn__User      : clientT -> connT

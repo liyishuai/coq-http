@@ -78,9 +78,9 @@ Instance Serialize__resource : Serialize (resource_state exp) :=
 Notation clientT := nat.
 
 Variant appE {exp_} : Type -> Type :=
-  App__Recv : server_state exp_ -> appE (clientT * http_request)
+  App__Recv : server_state exp_ -> appE (clientT * http_request id)
 | App__Send : clientT -> http_response exp_ -> appE unit
-| App__Forward  : authority -> http_request -> appE clientT
+| App__Forward  : authority -> http_request id -> appE clientT
 | App__Backward : server_state exp_ -> clientT -> appE (http_response id).
 Arguments appE : clear implicits.
 
@@ -312,7 +312,7 @@ Definition updateField (n : field_name) (v : field_value) : list (field_line id)
 
 Definition forward_request : itree E (http_response id) :=
   let 'URI s (Authority ou h op as a) p oq := u in
-  let req : http_request :=
+  let req : http_request id :=
       Request (RequestLine methd
                            (RequestTarget__Origin p oq)
                            (Version 1 1))

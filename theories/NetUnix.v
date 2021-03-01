@@ -125,15 +125,15 @@ Instance Serialize__conn : Serialize (file_descr * string) :=
 Definition origin_state : Type :=
   file_descr * N *
   list (clientT *
-        (file_descr * string * option http_request)) *
+        (file_descr * string * option (http_request id))) *
   server_state id.
 
 Definition origin_host (port : N) : authority :=
   Authority None "host.docker.internal" (Some port).
 
 Definition proxy_of_fd (fd : file_descr)
-  : list (clientT * (file_descr * string * option http_request)) ->
-    option (clientT * (file_descr * string * option http_request)) :=
+  : list (clientT * (file_descr * string * option (http_request id))) ->
+    option (clientT * (file_descr * string * option (http_request id))) :=
   find (file_descr_eqb fd ∘ fst ∘ fst ∘ snd).
 
 Definition recv_bytes_origin : stateT origin_state IO unit :=
@@ -166,7 +166,7 @@ Definition recv_bytes_origin : stateT origin_state IO unit :=
            end);;
         ret (tt, (sfd, port, conns', ss)).
 
-Definition send_request (c : clientT) (req : http_request) : stateT conn_state IO bool :=
+Definition send_request (c : clientT) (req : http_request id) : stateT conn_state IO bool :=
   let send_bytes fd s :=
         let str : string := request_to_string req in
         buf <- OBytes.of_string str;;

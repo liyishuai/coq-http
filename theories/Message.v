@@ -143,10 +143,10 @@ Arguments field__value {_}.
 Definition message_body := string.
 
 (** https://httpwg.org/http-core/draft-ietf-httpbis-messaging-latest.html#message.format *)
-Record http_request :=
+Record http_request {exp_} :=
   Request {
       request__line   : request_line;
-      request__fields : list (field_line id);
+      request__fields : list (field_line exp_);
       request__body   : option message_body
     }.
 
@@ -156,5 +156,7 @@ Record http_response {exp_} :=
       response__fields : list (field_line exp_);
       response__body   : option (exp_ message_body)
     }.
+Arguments http_request  : clear implicits.
 Arguments http_response : clear implicits.
+Arguments Request  {exp_}.
 Arguments Response {exp_}.

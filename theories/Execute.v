@@ -29,9 +29,9 @@ Fixpoint findResponse (s : conn_state)
 
 Fixpoint findRequest'
          (conns : list (clientT *
-                        (OUnix.file_descr * string * option http_request)))
-  : IO (option (clientT * http_request) *
-        list (clientT * (OUnix.file_descr * string * option http_request)))
+                        (OUnix.file_descr * string * option (http_request id))))
+  : IO (option (clientT * http_request id) *
+        list (clientT * (OUnix.file_descr * string * option (http_request id))))
   :=
     match conns with
     | [] => ret (None, [])
@@ -52,7 +52,7 @@ Fixpoint findRequest'
     end.
 
 Definition findRequest (s : origin_state) :
-  IO (option (clientT * http_request) * origin_state) :=
+  IO (option (clientT * http_request id) * origin_state) :=
   let '(sfd, port, conns, ss) := s in
   '(or, conns') <- findRequest' conns;;
   ret (or, (sfd, port, conns', ss)).
@@ -62,20 +62,31 @@ Definition tester_state : Type := conn_state * origin_state.
 Definition originAuthority (port : N) : authority :=
   Authority None "host.docker.internal" (Some port).
 
-Definition io_choose {A} (default : A) (l : list A) : IO A :=
+Definition io_choose_ {A} (default : IO A) (l : list A) : IO A :=
   match l with
-  | [] => ret default
-  | _ :: _ =>
+  | [] => default
+  | a :: _ =>
     i <- nat_of_int <$> ORandom.int (int_of_nat (length l));;
-    ret (nth i l default)
+    ret (nth i l a)
   end.
+
+Definition io_choose' {A} (l : list A) : IO (nat * A) :=
+  match l with
+  | [] => failwith "Cannot choose from empty list"
+  | a :: _ =>
+    i <- nat_of_int <$> ORandom.int (int_of_nat (length l));;
+    ret (i, nth i l a)
+  end.
+
+Definition io_choose {A} : list A -> IO A :=
+  fmap snd ∘ io_choose'.
 
 Definition io_or {A} (x y : IO A) : IO A :=
   b <- ORandom.bool tt;;
   if b : bool then x else y.
 
 Definition gen_string' : IO string :=
-  io_choose "" ["Hello"; "World"].
+  io_choose ["Hello"; "World"].
 
 Fixpoint gen_many {A} (n : nat) (ma : IO A) : IO (list A) :=
   match n with
@@ -87,41 +98,24 @@ Definition gen_string : IO string :=
   String "~" ∘ String.concat "" <$> gen_many 3 gen_string'.
 
 Definition gen_path (s : server_state exp) : IO path :=
-  let paths : list path := map fst s in
-  p <- gen_string;;
-  io_choose p (p::paths).
+  io_choose_ gen_string (map fst s).
 
-Definition gen_etag (p : path) (s : server_state exp) (es : exp_state)
-  : IO field_value :=
-  let tags : list field_value :=
-      concat (map (fun st =>
-                     match snd st with
-                     | inl t => [t]
-                     | inr n => n
-                     end) (snd es)) in
-  (* prerr_endline ("Generating ETag for " *)
-  (*                  ++ to_string p ++ " under state " *)
-  (*                  ++ to_string (s, es));; *)
-  let random_tag := io_choose """Random""" tags in
-  match get p s with
-  | None
-  | Some None
-  | Some (Some (ResourceState _ None)) => random_tag
-  | Some (Some (ResourceState _ (Some tx))) =>
-    match tx with
-    | Exp__Const t => io_or (ret t) (io_choose t tags)
-    | Exp__ETag  x =>
-      match get x (snd es) with
-      | Some (inl t)  => ret t
-      | Some (inr ts) => io_choose """Unknown""" ts
-      | None => random_tag
-      end
-    | _ => random_tag
-    end
+Fixpoint pick_some {A} (l : list (option A)) : list A :=
+  match l with
+  | [] => []
+  | Some a :: l' => a :: pick_some l'
+  | None   :: l' =>     pick_some l'
   end.
 
-Definition random_request (origin_port : N) (s : server_state exp) (es : exp_state)
-  : IO http_request :=
+Definition gen_etag (s : server_state exp) : IO (exp field_value) :=
+  let rs : list (resource_state exp) := pick_some $ map snd           s in
+  let ts : list (exp field_value)    := pick_some $ map resource__etag rs in
+  io_choose_ (ret $ Exp__Const """Random""") ts.
+
+Definition gen_request (origin_port : N) (s : server_state exp)
+  : IO (http_request exp) :=
+  m <- io_or (ret Method__GET) (ret Method__PUT);;
+  p <- gen_path s;;
   (* let a := Authority None "localhost" (Some server_port) in *)
   a <- io_or (ret $ Authority None "localhost" (Some server_port))
             (ret $ Authority None "host.docker.internal" (Some origin_port));;
@@ -135,64 +129,45 @@ Definition random_request (origin_port : N) (s : server_state exp) (es : exp_sta
   | Method__PUT =>
     str0 <- gen_string;;
     let str1 : string := p ++ ": " ++ str0 in
-    tag_field <- io_or (t <- gen_etag p s es;;
-                       match m with
-                       | Method__GET | Method__HEAD => io_or
-                         (ret [@Field id "If-Match" (t : field_value)])
-                         (ret [@Field id "If-None-Match" (t : field_value)])
-                       | _ => ret [@Field id "If-Match" (t : field_value)]
-                       end)
-                      (ret []);;
+    tag_field <- (t <- gen_etag s;;
+                 io_choose [[Field "If-Match" t];
+                            [Field "If-None-Match" t];
+                            []]);;
     ret (Request
            l (tag_field
-                ++ [Field "Host" $ authority_to_string a;
-                   Field "Content-Length" (to_string $ String.length str1)])
+                ++ [Field "Host" $ Exp__Const $ authority_to_string a;
+                    @Field exp "Content-Length" $
+                           Exp__Const $ to_string $ String.length str1])
            (Some str1))
-  | _ => ret $ Request l [Field "Host" $ authority_to_string a] None
+  | _ => ret $ Request l [Field "Host" $ Exp__Const $ authority_to_string a] None
   end%string.
 
-Definition gen_request' (p : path) (s : server_state exp)
-           (es : exp_state) : IO http_request :=
-  let port : string := to_string server_port in
-  match get p s with
-  | Some (Some _) =>
-    str0 <- gen_string;;
-    t <- gen_etag p s es;;
-    tag_field <-
-    io_or (ret [])
-          (io_or (ret [@Field id "IF-Match" (t : field_value)])
-                 (ret [@Field id "If-None-Match" t]));;
-    io_or
-      (let l : request_line :=
-           RequestLine Method__PUT (RequestTarget__Origin p None) (Version 1 1) in
-       let str1 : string := p ++ ": " ++ str0 in
-       ret (Request
-              l ([Field "Host" $ "localhost:" ++ port;
-                 Field "Content-Length" (to_string $ String.length str1)]
-                   ++ tag_field) (Some str1)))
-      (let l : request_line :=
-           RequestLine Method__GET (RequestTarget__Origin p None) (Version 1 1) in
-       ret (Request
-              l ((Field "Host" $ "localhost:" ++ port)::tag_field) None))
-  | Some None
-  | None =>
-    io_or (let l : request_line :=
-               RequestLine Method__PUT (RequestTarget__Origin p None) (Version 1 1) in
-           str0 <- gen_string;;
-           let str1 : string := p ++ ": " ++ str0 in
-           ret $ Request
-               l [Field "Host" $ "localhost:" ++ port;
-                 Field "Content-Length" (to_string $ String.length str1)]
-               (Some str1))
-          (let l : request_line :=
-               RequestLine Method__GET (RequestTarget__Origin p None) (Version 1 1) in
-           ret (Request l [Field "Host" $ "localhost:" ++ port] None : http_request))
+Definition fill_tag (es : exp_state) (tx : exp field_value)
+  : IO (id field_value) :=
+  let gen_tag :=
+      io_choose_ gen_string $ @concat _ $
+                 map (fun s => match snd s with
+                            | inl t => [t]
+                            | inr ts => ts
+                            end) $ snd es in
+  match tx with
+  | Exp__Const t => io_or (ret t) gen_tag
+  | Exp__Body x =>
+    match get x $ snd es with
+    | Some (inl t)  => io_or (ret t) gen_tag
+    | Some (inr ts) => io_or (io_choose_ gen_tag ts) gen_tag
+    | None          => gen_tag
+    end
+  | _ => gen_tag
   end.
 
-Definition gen_request (port : N) (s : server_state exp) (es : exp_state)
-  : IO http_request :=
-  p <- gen_path s;;
-  io_or (gen_request' p s es) (random_request port s es).
+Definition fill_request (es : exp_state) (rx : http_request exp)
+  : IO (http_request id) :=
+  let 'Request l fx b := rx in
+  let fill_field (f : field_line exp) : IO (field_line id) :=
+      let 'Field n vx := f in @Field id n <$> fill_tag es vx in
+  fs <- sequence (map fill_field fx);;
+  ret (Request l fs b).
 
 Definition ok (s : string) : state (server_state id) (http_response id) :=
   ret (Response (status_line_of_code 200)
@@ -289,7 +264,7 @@ Definition if_none_match (methd : request_method) (p : path)
        | None => accept
        end).
 
-Definition execute_request (req : http_request)
+Definition execute_request (req : http_request id)
   : state (server_state id) (http_response id) :=
   mkState
     (fun ss =>
@@ -356,9 +331,10 @@ Definition client_io (port : N) : clientE ~> stateT (tester_state * nat) IO :=
                              dst $ inr res, (cs, os2, S n))
                    else (None, (cs, os2, n)))
             | Conn__Server =>
-              req <- gen_request port ss es;;
+              rx <- gen_request port ss;;
+              req <- fill_request es rx;;
               let cids : list clientT := map fst cs in
-              c <- io_choose 1%nat (S (length cs) :: cids ++ cids ++ cids ++ cids);;
+              c <- io_choose (S (length cs) :: cids ++ cids ++ cids ++ cids);;
               '(b, cs1) <- runStateT (send_request c req) cs;;
               ret (if b : bool
                    then (Some $ Packet (Conn__User c) Conn__Server $ inl req, (cs1, os, S n))
