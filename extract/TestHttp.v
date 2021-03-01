@@ -6,9 +6,8 @@ From HTTP Require Import
 Parameter command : ocaml_string -> IO int.
 
 Definition run_test : io_unit :=
-  IO.unsafe_run'
-    (ORandom.self_init tt;;
-     (run_time $ multi_test $ @test void http_smi)).
+  IO.unsafe_run
+    (ORandom.self_init tt;; multi_test (@test void http_smi)).
 
 Extract Constant command => "fun s k -> k (Sys.command s)".
 

@@ -44,7 +44,7 @@ hs:
 bug%: TestHttp.native
 	$(MAKE) server SERVER=ysli/apache:$@
 	sleep 1
-	./TestHttp.native
+	./TestHttp.native 2> client.log
 
 etag-test:
 	curl -X PUT -d Fine localhost:$(PORT)/wat

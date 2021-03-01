@@ -145,14 +145,21 @@ Definition gen_request (origin_port : N) (s : server_state exp)
 Definition fill_tag (es : exp_state) (tx : exp field_value)
   : IO (id field_value) :=
   let gen_tag :=
-      io_choose_ gen_string $ @concat _ $
+      io_choose_ (ret """Random""") $ @concat _ $
                  map (fun s => match snd s with
                             | inl t => [t]
                             | inr ts => ts
                             end) $ snd es in
+  let gen_body :=
+      io_choose_ gen_string $ pick_some $ map snd $ snd $ fst es in
   match tx with
-  | Exp__Const t => io_or (ret t) gen_tag
+  | Exp__Const t => ret t
   | Exp__Body x =>
+    match get x $ snd $ fst es with
+    | Some (Some body) => io_or (ret body) gen_body
+    | _ => gen_body
+    end
+  | Exp__ETag x =>
     match get x $ snd es with
     | Some (inl t)  => io_or (ret t) gen_tag
     | Some (inr ts) => io_or (io_choose_ gen_tag ts) gen_tag
@@ -343,23 +350,24 @@ Definition client_io (port : N) : clientE ~> stateT (tester_state * nat) IO :=
             end
     end.
 
-Fixpoint execute' {R} (fuel : nat) (port : N) (s : tester_state) (n : nat) (m : itree tE R)
-  : IO (bool * tester_state * nat) :=
+Fixpoint execute' {R} (fuel : nat) (port : N) (s : tester_state)
+         (script : list (http_request exp)) (m : itree tE R)
+  : IO (bool * tester_state * list (http_request exp)) :=
   match fuel with
-  | O => ret (true, s, n)
+  | O => ret (true, s, [])
   | S fuel =>
     match observe m with
-    | RetF _  => ret (true, s, n)
-    | TauF m' => execute' fuel port s n m'
+    | RetF _  => ret (true, s, [])
+    | TauF m' => execute' fuel port s script m'
     | VisF e k =>
       match e with
-      | (Throw err|) => prerr_endline err;; ret (false, s, n)
+      | (Throw err|) => (* prerr_endline err;;  *)ret (false, s, [])
       | (|ne|) =>
         match ne in nondetE Y return (Y -> _) -> _ with
         | Or =>
           fun k =>
             b <- ORandom.bool tt;;
-            execute' fuel port s n (k b)
+            execute' fuel port s script (k b)
         end k
       | (||le|) =>
         match le in logE Y return (Y -> _) -> _ with
@@ -367,26 +375,105 @@ Fixpoint execute' {R} (fuel : nat) (port : N) (s : tester_state) (n : nat) (m : 
           fun k =>
             (* curr <- OFloat.to_string <$> OUnix.gettimeofday;; *)
             (* prerr_endline (ostring_app curr (String "009" "Tester: " ++ str));; *)
-            execute' fuel port s n (k tt)
+            execute' fuel port s script (k tt)
         end k
-      | (|||ce) => '(r, (s', n')) <- runStateT (client_io port _ ce) (s, n);;
-                  execute' fuel port s' n' (k r)
+      | (|||ce) =>
+        let '(cs, os0) := s in
+        match ce in clientE Y return (Y -> _) -> _ with
+        | Client__Recv =>
+          fun k =>
+            '(ocr, os1) <- execStateT recv_bytes_origin os0 >>= findRequest;;
+            match ocr with
+            | Some (c, r) =>
+              execute' fuel port (cs, os1) script $
+                       k $ Some $ Packet (Conn__Proxy c)
+                       (Conn__Authority $ originAuthority port)
+                       (inl r)
+            | None => '(op, cs') <- execStateT recv_bytes cs >>= findResponse;;
+                     execute' fuel port (cs', os0) script (k op)
+            end
+        | Client__Send ss dst es =>
+          fun k =>
+            match dst with
+            | Conn__Proxy c =>
+              let (res, os1) := runState (gen_response ss es c) os0 in
+              '(b, os2) <- runStateT (send_response c res) os1;;
+              let pkt := Packet (Conn__Authority $ originAuthority port) dst $ inr res in
+              let op := if b : bool then Some pkt else None in
+              execute' fuel port (cs, os2) script (k op)
+            | Conn__Server =>
+              '(sc', rx) <- (match script with
+                            | [] => pair [] <$> gen_request port ss
+                            | rx::sc' => ret (sc', rx)
+                            end);;
+              req <- fill_request es rx;;
+              let cids : list clientT := map fst cs in
+              c <- io_choose (S (length cs) :: cids);;
+              '(b, cs1) <- runStateT (send_request c req) cs;;
+              let pkt := Packet (Conn__User c) Conn__Server $ inl req in
+              if b : bool
+              then
+                prerr_endline ("================ SENT ================"
+                                 ++ to_string c ++ CRLF ++ request_to_string req);;
+                '(res, s', tr) <- execute' fuel port (cs1, os0) sc' (k $ Some pkt);;
+                ret (res, s', rx::tr)
+              else execute' fuel port (cs1, os0) sc' (k None)
+            | _ => failwith "execute': Should not happen"
+            end
+        end k
       end
     end
   end.
 
-Definition execute {R} (m : itree tE R) : IO (bool * nat) :=
+Definition execute {R} (m : itree tE R) (script : list (http_request exp))
+  : IO (bool * list (http_request exp)) :=
   prerr_endline "<<<<< begin test >>>>>>>";;
   '(port, sfd) <- create_sock;;
-  '(b, s, n) <- execute' 5000 port ([], (sfd, port, [], [])) O m;;
+  '(b, s, sc') <- execute' 5000 port ([], (sfd, port, [], [])) script m;;
   let '(cs, (sfd, _, conns, _)) := s in
   fold_left (fun m fd => OUnix.close fd;; m)
             (map (fst ∘ snd) cs ++ map (fst ∘ fst ∘ snd) conns)
             (OUnix.close sfd);;
-  prerr_endline (if b : bool
-                 then "<<<<< pass  test >>>>>>>"
-                 else "<<<<< fail  test >>>>>>>");;
-  ret (b, n).
+  prerr_endline "<<<<<<< end test >>>>>>>";;
+  ret (b, sc').
 
-Definition test {R} : itree smE R -> IO (bool * nat) :=
-  execute ∘ tester ∘ observer ∘ compose_switch tcp.
+Fixpoint shrink_list {A} (l : list A) : list (list A) :=
+  match l with
+  | [] => []
+  | a :: l' => let sl' := shrink_list l' in
+             l' :: cons a <$> sl'
+  end.
+
+Fixpoint repeat_list {A} (n : nat) (l : list A) : list A :=
+  match n with
+  | O => []
+  | S n' => l ++ repeat_list n' l
+  end.
+
+Definition shrink_execute' {R} (m : itree tE R) (script : list (http_request exp))
+  : IO (option (list (http_request exp))) :=
+  IO.fix_io
+    (fun shrink_rec ss =>
+       match ss with
+       | [] => ret None
+       | s :: ss' =>
+         '(b, s') <- execute m s;;
+         if (b : bool) ||| (length script <=? length s')%nat
+         then
+           prerr_endline "Continue shrinking";;
+           shrink_rec ss'
+         else ret (Some s')
+       end) (repeat_list 20 $ shrink_list script).
+
+Definition shrink_execute {R} (m : itree tE R) : IO bool :=
+  '(b, s) <- execute m [];;
+  if b : bool
+  then prerr_endline "Passing";; ret true
+  else
+    prerr_endline "Shrinking";;
+    IO.while_loop (shrink_execute' m) s;;
+    prerr_endline "Failing";;
+    ret false.
+
+Definition test {R} : itree smE R -> IO bool :=
+  shrink_execute ∘ tester ∘ observer ∘ compose_switch tcp.

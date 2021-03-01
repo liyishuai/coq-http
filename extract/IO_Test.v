@@ -42,14 +42,14 @@ Definition upon_success (handler test : IO bool) : IO bool :=
   then handler
   else ret false.
 
-Fixpoint multi_test' (fuel : nat) (test : IO (bool * nat)) : IO nat :=
+Fixpoint multi_test' (fuel : nat) (test : IO bool) : IO unit :=
   match fuel with
-  | O => prerr_endline "Out of fuel";; ret O
+  | O => prerr_endline "Success"
   | S fuel =>
-    '(b, n) <- test;;
+    b <- test;;
     if b : bool
-    then Nat.add n <$> multi_test' fuel test
-    else ret n
+    then multi_test' fuel test
+    else prerr_endline "Failure"
   end.
 
-Definition multi_test : IO (bool * nat) -> IO nat := multi_test' 5000.
+Definition multi_test : IO bool -> IO unit := multi_test' 5000.
