@@ -1,4 +1,5 @@
 -Q ../theories HTTP
+-Q ../ishrink IShrink
 -Q . Extract
 
 IO_Test.v

@@ -5,62 +5,33 @@ From HTTP Require Export
      NetUnix
      Parser
      Tester.
+From IShrink Require Export
+     IShrink.
+Open Scope string_scope.
+
+Notation payloadT := (payloadT http_request http_response).
+Notation packetT  := (packetT  http_request http_response connT).
 
 Fixpoint findResponse (s : conn_state)
-  : IO (option (packetT id) * conn_state) :=
+  : IO (conn_state * option (packetT id)) :=
   match s with
-  | [] => ret (None, [])
+  | [] => ret ([], None)
   | cfs :: t =>
     let '(c, (f, str)) := cfs in
     match parse parseResponse str with
     | inl (Some err) =>
       failwith $ "Bad response " ++ to_string str ++ " received on connection "
                ++ to_string c ++ ", error message: " ++ err
-    | inl None => '(op, t') <- findResponse t;;
-                 ret (op, cfs :: t')
+    | inl None => '(t', op) <- findResponse t;;
+                 ret (cfs :: t', op)
     | inr (r, str') =>
       (* curr <- OFloat.to_string <$> OUnix.gettimeofday;; *)
       (* prerr_endline curr;; *)
-      prerr_endline ("==============RECEIVED=============="
-                       ++ to_string c ++ CRLF ++ response_to_string r);;
-      ret (Some (Packet Conn__Server (Conn__User c) (inr r)), (c, (f, str')) :: t)
+      (* prerr_endline ("==============RECEIVED==============" *)
+      (*                  ++ to_string c ++ CRLF ++ response_to_string r);; *)
+      ret ((c, (f, str')) :: t, Some (Packet Conn__Server (Conn__User c) (inr r)))
     end
   end.
-
-Fixpoint findRequest'
-         (conns : list (clientT *
-                        (OUnix.file_descr * string * option (http_request id))))
-  : IO (option (clientT * http_request id) *
-        list (clientT * (OUnix.file_descr * string * option (http_request id))))
-  :=
-    match conns with
-    | [] => ret (None, [])
-    | conn :: t =>
-      let '(c, (fd, str, _)) := conn in
-      match parse parseRequest str with
-      | inl (Some err) =>
-        failwith $ "Bad request " ++ to_string str ++
-                 ", error message: " ++ err
-      | inl None => '(or, t') <- findRequest' t;;
-                   ret (or, conn :: t')
-      | inr (r, str') =>
-        prerr_endline ("===========PROXY RECEIVED==========="
-                         ++ to_string c
-                         ++ CRLF ++ request_to_string r);;
-        ret (Some (c, r), (c, (fd, str', Some r)) :: t)
-      end
-    end.
-
-Definition findRequest (s : origin_state) :
-  IO (option (clientT * http_request id) * origin_state) :=
-  let '(sfd, port, conns, ss) := s in
-  '(or, conns') <- findRequest' conns;;
-  ret (or, (sfd, port, conns', ss)).
-
-Definition tester_state : Type := conn_state * origin_state.
-
-Definition originAuthority (port : N) : authority :=
-  Authority None "host.docker.internal" (Some port).
 
 Definition io_choose_ {A} (default : IO A) (l : list A) : IO A :=
   match l with
@@ -107,373 +78,117 @@ Fixpoint pick_some {A} (l : list (option A)) : list A :=
   | None   :: l' =>     pick_some l'
   end.
 
-Definition gen_etag (s : server_state exp) : IO (exp field_value) :=
-  let rs : list (resource_state exp) := pick_some $ map snd           s in
-  let ts : list (exp field_value)    := pick_some $ map resource__etag rs in
-  io_choose_ (ret $ Exp__Const """Random""") ts.
+Variant texp : Type -> Set :=
+  Texp__Const  : field_value -> texp field_value
+| Texp__Var    : labelT      -> texp field_value
+| Texp__Random :               texp field_value.
 
-Definition gen_request (origin_port : N) (s : server_state exp)
-  : IO (http_request exp) :=
-  m <- io_or (ret Method__GET) (ret Method__PUT);;
-  p <- gen_path s;;
-  (* let a := Authority None "localhost" (Some server_port) in *)
-  a <- io_or (ret $ Authority None "localhost" (Some server_port))
-            (ret $ Authority None "host.docker.internal" (Some origin_port));;
-  m <- io_or (ret Method__GET) (ret Method__PUT);;
-  p <- gen_path s;;
-  let uri : absolute_uri :=
-      URI Scheme__HTTP a p None in
+Instance Serialize__texp : Serialize (texp field_value) :=
+  fun tx => match tx with
+         | Texp__Const v => Atom v
+         | Texp__Var x   => [Atom "Step"; to_sexp x]%sexp
+         | Texp__Random  => Atom "Random"
+         end.
+
+Instance Serialize__request {exp_} `{Serialize (exp_ field_value)}
+  : Serialize (http_request exp_) :=
+  fun req =>
+    let 'Request line fields obody := req in
+    [Atom $ line_to_string line;
+    to_sexp fields;
+    Atom $ body_to_string obody]%sexp.
+
+Notation traceT := (traceT http_request http_response connT).
+
+Definition get_tag (pkt : packetT id) : option field_value :=
+  if packet__payload pkt is inr res
+  then findField "ETag" $ response__fields res
+  else None.
+
+Definition has_tag (pkt : packetT id) : bool :=
+  if get_tag pkt is Some _ then true else false.
+
+Definition gen_request (ss : server_state exp) (tr : traceT)
+  : IO (http_request texp) :=
+  p <- gen_path ss;;
+  m <- io_choose [Method__GET; Method__PUT];;
   let l : request_line :=
-      RequestLine m (RequestTarget__Absolute uri) (Version 1 1) in
+      RequestLine m (RequestTarget__Origin p None) (Version 1 1) in
+  let host_field := @Field texp "Host" $ Texp__Const "localhost" in
+  let rs := filter (has_tag ∘ snd) tr in
+  t <- io_choose_ (pure Texp__Random) (map (Texp__Var ∘ fst) rs);;
+  tag_field <- (io_choose [[Field "If-Match" t];
+                         [Field "If-None-Match" t];
+                         []]);;
   match m with
   | Method__PUT =>
     str0 <- gen_string;;
     let str1 : string := p ++ ": " ++ str0 in
-    tag_field <- (t <- gen_etag s;;
-                 io_choose [[Field "If-Match" t];
-                            [Field "If-None-Match" t];
-                            []]);;
-    ret (Request
-           l (tag_field
-                ++ [Field "Host" $ Exp__Const $ authority_to_string a;
-                    @Field exp "Content-Length" $
-                           Exp__Const $ to_string $ String.length str1])
-           (Some str1))
-  | _ => ret $ Request l [Field "Host" $ Exp__Const $ authority_to_string a] None
+    ret $ Request
+        l (host_field
+             ::(@Field texp "Content-Length" $ Texp__Const $
+                      to_string $ String.length str1)
+             ::tag_field)
+        (Some str1)
+  | Method__GET =>
+    ret $ Request l (host_field::tag_field) None
+  | _ => ret $ Request l [host_field] None
   end%string.
 
-Definition fill_tag (es : exp_state) (tx : exp field_value)
-  : IO (id field_value) :=
-  let gen_tag :=
-      io_choose_ (ret """Random""") $ @concat _ $
-                 map (fun s => match snd s with
-                            | inl t => [t]
-                            | inr ts => ts
-                            end) $ snd es in
-  let gen_body :=
-      io_choose_ gen_string $ pick_some $ map snd $ snd $ fst es in
+Fixpoint map_if {A B} (f : A -> option B) (l : list A) : list B :=
+  if l is a::l'
+  then (if f a is Some b then cons b else id) (map_if f l')
+  else [].
+
+Definition instantiate_field (tr : traceT) (tx : texp field_value)
+  : field_value :=
   match tx with
-  | Exp__Const t => ret t
-  | Exp__Body x =>
-    match get x $ snd $ fst es with
-    | Some (Some body) => io_or (ret body) gen_body
-    | _ => gen_body
-    end
-  | Exp__ETag x =>
-    match get x $ snd es with
-    | Some (inl t)  => io_or (ret t) gen_tag
-    | Some (inr ts) => io_or (io_choose_ gen_tag ts) gen_tag
-    | None          => gen_tag
-    end
-  | _ => gen_tag
+  | Texp__Random  => """Random"""
+  | Texp__Const v => v
+  | Texp__Var x   =>
+    if map_if (get_tag ∘ snd) tr is t::_ then t else """Unknown"""
   end.
 
-Definition fill_request (es : exp_state) (rx : http_request exp)
-  : IO (http_request id) :=
+Definition instantiate_request (tr : traceT) (rx : http_request texp)
+  : http_request id :=
   let 'Request l fx b := rx in
-  let fill_field (f : field_line exp) : IO (field_line id) :=
-      let 'Field n vx := f in @Field id n <$> fill_tag es vx in
-  fs <- sequence (map fill_field fx);;
-  ret (Request l fs b).
+  let fs := map (fun '(Field n vx) => Field n (instantiate_field tr vx)) fx in
+  Request l fs b.
 
-Definition ok (s : string) : state (server_state id) (http_response id) :=
-  ret (Response (status_line_of_code 200)
-                [@Field id "Content-Length" $ to_string $ String.length s]
-                (Some s)).
+Definition http_tester : itree tE void :=
+  tester $ observer $ compose_switch tcp http_smi.
 
-Definition not_modified
-  : state (server_state id) (http_response id) :=
-  ret (Response (status_line_of_code 304) [] None).
+Instance Shrink__request : Shrink (http_request texp) := { shrink _ := [] }.
 
-Definition bad_request
-  : state (server_state id) (http_response id) :=
-  ret (Response (status_line_of_code 400)
-                [@Field id "Content-Length" "0"] $ Some "").
+Definition other_handler : nondetE +' logE ~> IO :=
+  fun _ e => match e with
+          | (ne|) => let 'Or := ne in ORandom.bool tt
+          | (|le) => let 'Log str := le in
+                    prerr_endline str
+          end.
 
-Definition forbidden
-  : state (server_state id) (http_response id) :=
-  ret (Response (status_line_of_code 403)
-                [@Field id "Content-Length" "0"] $ Some "").
+Arguments test : default implicits.
 
-Definition not_found
-  : state (server_state id) (http_response id) :=
-  ret (Response (status_line_of_code 404)
-                [@Field id "Content-Length" "0"] $ Some "").
-
-Definition method_not_allowed
-  : state (server_state id) (http_response id) :=
-  ret (Response (status_line_of_code 405)
-                [@Field id "Content-Length" "0"] $ Some "").
-
-Definition precondition_failed
-  : state (server_state id) (http_response id) :=
-  ret (Response (status_line_of_code 412)
-                [@Field id "Content-Length" "0"] $ Some "").
-
-Definition if_match (p : path) (hs : list (field_line id))
-           (m : state (server_state id) (http_response id))
-  : state (server_state id) (http_response id) :=
-  mkState
-    (fun ss =>
-       let reject := runState precondition_failed ss in
-       let accept := runState m ss in
-       match findField "If-Match" hs with
-       | Some v =>
-         match get p ss with
-         | Some (Some (ResourceState _ oetag)) =>
-           match v, oetag with
-           | "*", _  => accept
-           | _, None => reject
-           | v, Some t =>
-             match parse (parseCSV parseEntityTag) v with
-             | inl _ => runState bad_request ss
-             | inr (ts, _) =>
-               if existsb (etag_match false t) ts
-               then accept
-               else reject
-             end
-           end
-         | _ => reject
-         end
-       | None => accept
-       end).
-
-Definition if_none_match (methd : request_method) (p : path)
-           (hs : list (field_line id))
-           (m : state (server_state id) (http_response id))
-  : state (server_state id) (http_response id) :=
-  mkState
-    (fun ss =>
-       let reject :=
-           match methd with
-           | Method__GET | Method__HEAD => runState not_modified ss
-           | _ => runState precondition_failed ss
-           end in
-       let accept := runState m ss in
-       match findField "If-None-Match" hs with
-       | Some "*" =>
-         match get p ss with
-         | Some (Some _) => reject
-         | _ => accept
-         end
-       | Some v =>
-         match get p ss with
-         | Some (Some (ResourceState _ (Some t))) =>
-           match parse (parseCSV parseEntityTag) v with
-           | inl _ => runState bad_request ss
-           | inr (ts, _) =>
-             if existsb (etag_match true t) ts
-             then reject
-             else accept
-           end
-         | _ => accept
-         end
-       | None => accept
-       end).
-
-Definition execute_request (req : http_request id)
-  : state (server_state id) (http_response id) :=
-  mkState
-    (fun ss =>
-       let '(Request (RequestLine methd tgt ver) fields obody) := req in
-       match target_uri tgt fields with
-       | Some u =>
-         let 'URI s a p oq := u in
-         match methd with
-         | Method__GET =>
-           runState (ok "It works!") ss
-         | Method__PUT
-         | _ => runState method_not_allowed ss
-         end
-       | None => runState bad_request ss
-       end).
-
-Definition gen_response (ss : server_state exp) (es : exp_state)
-           (c : clientT) : state origin_state (http_response id) :=
-  mkState
-    (fun os =>
-       let '(sfd, port, conns, ss) := os in
-       match get c conns with
-       | Some (fd, str, Some req) =>
-         let (res, ss') := runState (execute_request req) ss in
-         (res, (sfd, port, conns, ss'))
-       | _ => (Response (status_line_of_code 403) [] None, os)
-       end).
-
-Definition client_io (port : N) : clientE ~> stateT (tester_state * nat) IO :=
-  fun _ ce =>
-    match ce with
-    | Client__Recv =>
-      mkStateT
-        (fun s0 =>
-           let '(cs, os0, n) := s0 in
-           let recv_client os :=
-               '(op, cs') <- execStateT recv_bytes cs >>= findResponse;;
-               (* prerr_endline ("Client received " ++ to_string op);; *)
-               let n' : nat :=
-                   match op with
-                   | Some _ => S n
-                   | None   => n
-                   end in
-               ret (op, (cs', os, n')) in
-             '(ocr, os1) <- execStateT recv_bytes_origin os0 >>= findRequest;;
-             match ocr with
-             | Some (c, r) =>
-               (* prerr_endline ("Proxy received " ++ to_string p);; *)
-               ret (Some (Packet (Conn__Proxy c)
-                                 (Conn__Authority $ originAuthority port)
-                                 (inl r)), (cs, os1, S n))
-             | None => recv_client os1
-             end)
-    | Client__Send ss dst es =>
-      mkStateT
-        $ fun s0 =>
-            let '(cs, os, n) := s0 in
-            match dst with
-            | Conn__Proxy c =>
-              let (res, os1) := runState (gen_response ss es c) os in
-              '(b, os2) <- runStateT (send_response c res) os1;;
-              ret (if b : bool
-                   then (Some $ Packet (Conn__Authority $ originAuthority port)
-                             dst $ inr res, (cs, os2, S n))
-                   else (None, (cs, os2, n)))
-            | Conn__Server =>
-              rx <- gen_request port ss;;
-              req <- fill_request es rx;;
-              let cids : list clientT := map fst cs in
-              c <- io_choose (S (length cs) :: cids ++ cids ++ cids ++ cids);;
-              '(b, cs1) <- runStateT (send_request c req) cs;;
-              ret (if b : bool
-                   then (Some $ Packet (Conn__User c) Conn__Server $ inl req, (cs1, os, S n))
-                   else (None, (cs1, os, n)))
-            | _ => failwith ""
-            end
-    end.
-
-Fixpoint execute' {R} (fuel : nat) (port : N) (s : tester_state)
-         (script : list (http_request exp)) (m : itree tE R)
-  : IO (bool * tester_state * list (http_request exp)) :=
-  match fuel with
-  | O => ret (true, s, [])
-  | S fuel =>
-    match observe m with
-    | RetF _  => ret (true, s, [])
-    | TauF m' => execute' fuel port s script m'
-    | VisF e k =>
-      match e with
-      | (Throw err|) => (* prerr_endline err;;  *)ret (false, s, [])
-      | (|ne|) =>
-        match ne in nondetE Y return (Y -> _) -> _ with
-        | Or =>
-          fun k =>
-            b <- ORandom.bool tt;;
-            execute' fuel port s script (k b)
-        end k
-      | (||le|) =>
-        match le in logE Y return (Y -> _) -> _ with
-        | Log str =>
-          fun k =>
-            (* curr <- OFloat.to_string <$> OUnix.gettimeofday;; *)
-            (* prerr_endline (ostring_app curr (String "009" "Tester: " ++ str));; *)
-            execute' fuel port s script (k tt)
-        end k
-      | (|||ce) =>
-        let '(cs, os0) := s in
-        match ce in clientE Y return (Y -> _) -> _ with
-        | Client__Recv =>
-          fun k =>
-            '(ocr, os1) <- execStateT recv_bytes_origin os0 >>= findRequest;;
-            match ocr with
-            | Some (c, r) =>
-              execute' fuel port (cs, os1) script $
-                       k $ Some $ Packet (Conn__Proxy c)
-                       (Conn__Authority $ originAuthority port)
-                       (inl r)
-            | None => '(op, cs') <- execStateT recv_bytes cs >>= findResponse;;
-                     execute' fuel port (cs', os0) script (k op)
-            end
-        | Client__Send ss dst es =>
-          fun k =>
-            match dst with
-            | Conn__Proxy c =>
-              let (res, os1) := runState (gen_response ss es c) os0 in
-              '(b, os2) <- runStateT (send_response c res) os1;;
-              let pkt := Packet (Conn__Authority $ originAuthority port) dst $ inr res in
-              let op := if b : bool then Some pkt else None in
-              execute' fuel port (cs, os2) script (k op)
-            | Conn__Server =>
-              '(sc', rx) <- (match script with
-                            | [] => pair [] <$> gen_request port ss
-                            | rx::sc' => ret (sc', rx)
-                            end);;
-              req <- fill_request es rx;;
-              let cids : list clientT := map fst cs in
-              c <- io_choose (S (length cs) :: cids);;
-              '(b, cs1) <- runStateT (send_request c req) cs;;
-              let pkt := Packet (Conn__User c) Conn__Server $ inl req in
-              if b : bool
-              then
-                prerr_endline ("================ SENT ================"
-                                 ++ to_string c ++ CRLF ++ request_to_string req);;
-                '(res, s', tr) <- execute' fuel port (cs1, os0) sc' (k $ Some pkt);;
-                ret (res, s', rx::tr)
-              else execute' fuel port (cs1, os0) sc' (k None)
-            | _ => failwith "execute': Should not happen"
-            end
-        end k
-      end
-    end
-  end.
-
-Definition execute {R} (m : itree tE R) (script : list (http_request exp))
-  : IO (bool * list (http_request exp)) :=
-  prerr_endline "<<<<< begin test >>>>>>>";;
-  '(port, sfd) <- create_sock;;
-  '(b, s, sc') <- execute' 5000 port ([], (sfd, port, [], [])) script m;;
-  let '(cs, (sfd, _, conns, _)) := s in
-  fold_left (fun m fd => OUnix.close fd;; m)
-            (map (fst ∘ snd) cs ++ map (fst ∘ fst ∘ snd) conns)
-            (OUnix.close sfd);;
-  prerr_endline "<<<<<<< end test >>>>>>>";;
-  ret (b, sc').
-
-Fixpoint shrink_list {A} (l : list A) : list (list A) :=
-  match l with
-  | [] => []
-  | a :: l' => let sl' := shrink_list l' in
-             l' :: cons a <$> sl'
-  end.
-
-Fixpoint repeat_list {A} (n : nat) (l : list A) : list A :=
-  match n with
-  | O => []
-  | S n' => l ++ repeat_list n' l
-  end.
-
-Definition shrink_execute' {R} (m : itree tE R) (script : list (http_request exp))
-  : IO (option (list (http_request exp))) :=
-  IO.fix_io
-    (fun shrink_rec ss =>
-       match ss with
-       | [] => ret None
-       | s :: ss' =>
-         '(b, s') <- execute m s;;
-         if (b : bool) ||| (length script <=? length s')%nat
-         then
-           prerr_endline "Continue shrinking";;
-           shrink_rec ss'
-         else ret (Some s')
-       end) (repeat_list 20 $ shrink_list script).
-
-Definition shrink_execute {R} (m : itree tE R) : IO bool :=
-  '(b, s) <- execute m [];;
-  if b : bool
-  then prerr_endline "Passing";; ret true
-  else
-    prerr_endline "Shrinking";;
-    IO.while_loop (shrink_execute' m) s;;
-    prerr_endline "Failing";;
-    ret false.
-
-Definition test {R} : itree smE R -> IO bool :=
-  shrink_execute ∘ tester ∘ observer ∘ compose_switch tcp.
+Definition test_http : IO bool :=
+  test texp
+       (requestT:=http_request)
+       (responseT:=http_response)
+       Shrink__request
+       Serialize__request
+       (connT:=connT)
+       Conn__Server
+       Dec_Eq__connT
+       Serialize__packetT
+       (gen_state:=server_state exp)
+       (otherE:=nondetE +' logE)
+       other_handler
+       instantiate_request
+       gen_request
+       (conn_state:=conn_state)
+       []
+       (recv_bytes;; findResponse)
+       send_request
+       (fun s => fold_left (fun m fd => OUnix.close fd;; m)
+                        (map (fst ∘ snd) s) (ret tt))
+       (R:=void)
+       http_tester.

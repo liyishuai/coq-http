@@ -22,6 +22,7 @@ depends: [
   "ocamlbuild" { >= "0.14.0" }
   "coq-itree-io" { >= "0.1.0" }
   "coq-parsec" { >= "0.1.0" }
+  "coq-quickchick" 
 ]
 
 tags: [

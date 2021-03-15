@@ -34,6 +34,9 @@ dependencies:
     opam:
       name: coq-parsec
       version: '{ >= "0.1.0" }'
+  - description: '[QuickChick](https://github.com/QuickChick/QuickChick/)'
+    opam:
+      name: coq-quickchick
 test_target: test
 install_flag: INSTALLDIR=%{bin}%
 categories:
@@ -50,9 +53,9 @@ supported_coq_versions:
   text: 8.12 or later
   opam: '{ >= "8.12~" }'
 tested_coq_opam_versions:
-  - version: 'dev'
-  - version: '8.12'
-  - version: '8.13'
+  - version: 'dev-ocaml-4.11-flambda'
+  - version: '8.12-ocaml-4.11-flambda'
+  - version: '8.13-ocaml-4.11-flambda'
 publications:
   - pub_title: >
       From C to Interaction Trees:

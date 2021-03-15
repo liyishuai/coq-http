@@ -6,7 +6,8 @@ From HTTP Require Export
 Open Scope N_scope.
 Open Scope string_scope.
 
-Instance Serialize__field : Serialize (field_line exp) :=
+Instance Serialize__field {exp_} `{Serialize (exp_ field_value)}
+  : Serialize (field_line exp_) :=
   fun f => let 'Field n v := f in
         [to_sexp n; to_sexp v]%sexp.
 
@@ -79,8 +80,8 @@ Definition unify_state : Set := exp_state * list (clientT * clientT).
 
 Variant testerE : Type -> Type :=
   Tester__Recv : testerE (packetT id)
-| Tester__Send : server_state exp -> connT ->
-               exp_state -> testerE (packetT id).
+| Tester__Send : server_state exp ->
+               testerE (packetT id).
 
 Class Is__stE E `{failureE -< E}
       `{decideE -< E} `{logE -< E} `{testerE -< E}.
@@ -142,16 +143,6 @@ Definition instantiate_unify {E A} `{Is__stE E} (e : unifyE A)
         Ret (s1, ps, tt)
       | inl err => throw $ "Unify If-Match failed: " ++ err
       end
-    | Unify__Proxy cx c0 =>
-      match get cx ps with
-      | Some c1 =>
-        if (c0 =? c1)%nat
-        then Ret (s, tt)
-        else throw $ "Expect model connection " ++ to_string cx
-                   ++ " corresponds to " ++ to_string c0
-                   ++ ", but observed " ++ to_string c1
-      | None => Ret (xs, (cx, c0) :: ps, tt)
-      end
     end.
 
 Definition instantiate_observe {E A} `{Is__stE E} (e : observeE A)
@@ -159,21 +150,8 @@ Definition instantiate_observe {E A} `{Is__stE E} (e : observeE A)
   fun s =>
     let (xs, ps) := s in
     match e with
-    | Observe__ToServer st dst0 =>
-      dst <- match dst0 with
-            | Conn__Proxy c0 =>
-              match get c0 ps with
-              | Some c => ret $ Conn__Proxy c
-              | None =>
-                throw
-                  $ "Model proxy shouldn't receive response from "
-                  ++ to_string c0
-                  ++ " before forwarding any message to it. Proxy mapping: "
-                  ++ to_string ps
-              end
-            | _ => ret dst0
-            end;;
-      pkt <- embed Tester__Send st dst xs;;
+    | Observe__ToServer st =>
+      pkt <- embed Tester__Send st;;
       Ret (s, pkt)
     | Observe__FromServer =>
       pkt <- embed Tester__Recv;;
@@ -194,30 +172,6 @@ Definition unifier' {E R} `{Is__stE E} (m : itree oE R)
             | (|||e|) => @liftState unify_state _ (itree _) _ (trigger e)
             end) m.
 
-Definition logger__st {E R} `{Is__stE E} (m : itree stE R)
-  : Monads.stateT (list traceT) (itree E) R :=
-  interp
-    (fun _ e =>
-       match e with
-       | (Throw err|) =>
-         fun s =>
-           embed Log ("Failing trace: " ++ CRLF ++ list_to_string (rev' s));;
-           throw err
-       | (|||e) =>
-         match e in testerE Y return Monads.stateT _ _ Y with
-         | Tester__Recv =>
-           fun s =>
-             pkt <- embed Tester__Recv;;
-             ret (Trace__In  pkt::s, pkt)
-         | Tester__Send ss c es =>
-           fun s =>
-             pkt <- embed Tester__Send ss c es;;
-             ret (Trace__Out pkt::s, pkt)
-         end
-       | (|e|)
-       | (||e|) => liftState $ trigger e
-       end) m.
-
 Definition unifier {E R} `{Is__stE E} (m : itree oE R) : itree E R :=
   (* snd <$> logger__st (snd <$> unifier' m (0, [], [], [])) []. *)
   snd <$> unifier' m (0, [], [], []).
@@ -231,7 +185,7 @@ CoFixpoint match_event {T R} (e0 : testerE R) (r : R) (m : itree stE T)
     match e with
     | (|||oe) =>
       match oe in testerE Y, e0 in testerE R return (Y -> _) -> R -> _ with
-      | Tester__Send _ _ _, Tester__Send _ _ _
+      | Tester__Send _, Tester__Send _
       | Tester__Recv      , Tester__Recv => id
       | _, _ => fun _ _ => throw "Unexpected event"
       end k r
@@ -242,23 +196,18 @@ CoFixpoint match_event {T R} (e0 : testerE R) (r : R) (m : itree stE T)
 Definition match_observe {T R} (e : testerE T) (r : T) (l : list (itree stE R))
   : list (itree stE R) := map (match_event e r) l.
 
-Variant clientE : Type -> Type :=
-| Client__Recv : clientE (option (packetT id))
-| Client__Send : server_state exp -> connT -> exp_state ->
-               clientE (option (packetT id)).
+Notation clientE    := (clientE    http_request http_response connT (server_state exp)).
+Notation Client__Send := (Client__Send http_request http_response connT (server_state exp)).
+Notation Client__Recv := (Client__Recv http_request http_response connT (server_state exp)).
+Notation tE := (failureE +' clientE +' nondetE +' logE).
 
-Class Is__tE E `{failureE -< E} `{nondetE -< E}
-      `{logE -< E} `{clientE -< E}.
-Notation tE := (failureE +' nondetE +' logE +' clientE).
-Instance tE_Is__tE : Is__tE tE. Defined.
-
-CoFixpoint backtrack' {E R} `{Is__tE E} (others : list (itree stE R))
-           (m : itree stE R) : itree E R :=
+CoFixpoint backtrack' {R} (others : list (itree stE R))
+           (m : itree stE R) : itree tE R :=
   match observe m with
   | RetF r => Ret r
   | TauF m' => Tau (backtrack' others m')
   | VisF e k =>
-    let catch (err : string) : itree E R :=
+    let catch (err : string) : itree tE R :=
         match others with
         | [] => throw err
         | other :: others' =>
@@ -280,7 +229,7 @@ CoFixpoint backtrack' {E R} `{Is__tE E} (others : list (itree stE R))
       end k
     | (|||te) =>
       match te in testerE Y return (Y -> _) -> _ with
-      | Tester__Send st oh es =>
+      | Tester__Send st =>
         fun k => op1 <- trigger Client__Recv;;
               match op1 with
               | Some p1 =>
@@ -290,10 +239,10 @@ CoFixpoint backtrack' {E R} `{Is__tE E} (others : list (itree stE R))
                   Tau (backtrack' others' other)
                 end
               | None =>
-                opkt <- embed Client__Send st oh es;;
+                opkt <- embed Client__Send st;;
                 match opkt with
                 | Some pkt =>
-                  Tau (backtrack' (match_observe (Tester__Send st oh es)
+                  Tau (backtrack' (match_observe (Tester__Send st)
                                                  pkt others) (k pkt))
                 | None => catch "Not ready to send"
                 end
@@ -318,8 +267,8 @@ CoFixpoint backtrack' {E R} `{Is__tE E} (others : list (itree stE R))
     end
   end.
 
-Definition backtrack {E R} `{Is__tE E} : itree stE R -> itree E R :=
+Definition backtrack {R} : itree stE R -> itree tE R :=
   backtrack' [].
 
-Definition tester {E R} `{Is__tE E} : itree oE R -> itree E R :=
+Definition tester {R} : itree oE R -> itree tE R :=
   backtrack ∘ unifier.

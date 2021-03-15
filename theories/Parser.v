@@ -2,11 +2,10 @@ From ExtLib Require Export
      Applicative
      OptionMonad
      Reducible.
+From HTTP Require Export
+     Message.
 From Parsec Require Export
      Core.
-From HTTP Require Export
-     Message
-     Common.
 From Coq Require Import
      String.
 Export

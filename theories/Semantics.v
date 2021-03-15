@@ -9,6 +9,8 @@ From ITree Require Export
 From HTTP Require Export
      Printer
      Parser.
+From IShrink Require Export
+     Common.
 Export
   FunNotation
   FunctorNotation
@@ -79,9 +81,7 @@ Notation clientT := nat.
 
 Variant appE {exp_} : Type -> Type :=
   App__Recv : server_state exp_ -> appE (clientT * http_request id)
-| App__Send : clientT -> http_response exp_ -> appE unit
-| App__Forward  : authority -> http_request id -> appE clientT
-| App__Backward : server_state exp_ -> clientT -> appE (http_response id).
+| App__Send : clientT -> http_response exp_ -> appE unit.
 Arguments appE : clear implicits.
 
 Variant logE : Type -> Set :=
@@ -310,15 +310,6 @@ Definition removeField (n : field_name) : list (field_line id) :=
 Definition updateField (n : field_name) (v : field_value) : list (field_line id)
   := Field n v :: removeField n.
 
-Definition forward_request : itree E (http_response id) :=
-  let 'URI s (Authority ou h op as a) p oq := u in
-  let req : http_request id :=
-      Request (RequestLine methd
-                           (RequestTarget__Origin p oq)
-                           (Version 1 1))
-              (updateField "Host" $ to_string a) om in
-  embed App__Forward a req >>= embed App__Backward st.
-
 End Proxy.
 
 Definition target_uri : option absolute_uri :=
@@ -371,8 +362,6 @@ Definition http_smi_body : itree E (server_state exp) :=
   match target_uri with
   | Some u =>
     let 'URI s (Authority ou h op as a) p oq := u in
-    if (h =? "127.0.0.1") &&& (op = Some server_port?)
-    then
       match methd with
       | Method__GET =>
         fst <$> http_smi_get_body p st
@@ -382,9 +371,6 @@ Definition http_smi_body : itree E (server_state exp) :=
       | _ =>
         send_code 405 [] None;; ret st
       end
-    else
-      forward_request u >>= embed App__Send c ∘ wrap_response;;
-      ret st
   | None => bad_request;; ret st
   end.
 

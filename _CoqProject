@@ -1,7 +1,9 @@
 -Q theories HTTP
+-Q ishrink  IShrink
 -arg -w -arg -solve_obligation_error
 
-theories/Common.v
+ishrink/Common.v
+ishrink/IShrink.v
 theories/Message.v
 theories/Printer.v
 theories/Parser.v
@@ -12,5 +14,4 @@ theories/NetUnix.v
 theories/Trace.v
 theories/Observe.v
 theories/Tester.v
-theories/TesterSpec.v
 theories/Execute.v

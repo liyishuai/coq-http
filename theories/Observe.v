@@ -3,7 +3,6 @@ From ITree Require Export
 From HTTP Require Export
      Printer
      Instances
-     Trace
      Tcp.
 
 Definition wrap_payload : payloadT id -> payloadT exp :=
@@ -14,7 +13,7 @@ Definition wrap_packet (pkt : packetT id) : packetT exp :=
   Packet s d (wrap_payload p).
 
 Variant observeE : Type -> Type :=
-  Observe__ToServer   : server_state exp -> connT -> observeE (packetT id)
+  Observe__ToServer   : server_state exp -> observeE (packetT id)
 | Observe__FromServer : observeE (packetT id).
 
 Variant decideE : Type -> Set :=
@@ -24,7 +23,6 @@ Variant unifyE : Type -> Type :=
   Unify__FreshBody : unifyE (exp message_body)
 | Unify__FreshETag : unifyE (exp field_value)
 | Unify__Match     : exp bool -> bool -> unifyE unit
-| Unify__Proxy     : clientT -> clientT -> unifyE unit
 | Unify__Response  : http_response exp -> http_response id -> unifyE unit.
 
 Notation failureE := (exceptE string).
@@ -37,24 +35,14 @@ Instance oE_Is__oE : Is__oE oE. Defined.
 (* TODO: distinguish proxy from clients *)
 Definition dualize {E R} `{Is__oE E} (e : netE R) : itree E R :=
   match e in netE R return _ R with
-  | Net__In st c => wrap_packet <$> embed Observe__ToServer st c
+  | Net__In st => wrap_packet <$> embed Observe__ToServer st
   | Net__Out (Packet s0 d0 p0) =>
     pkt <- embed Observe__FromServer;;
     let '(Packet s d p) := pkt in
-    match s0, s with
-    | Conn__Proxy c0, Conn__Proxy c =>
-      embed Unify__Proxy c0 c;;
-      (* embed Log ("Unification complete: " *)
-      (*              ++ to_string c0 ++ " -> " ++ to_string c) *)
-      ret tt
-    | _, _ =>
-      if s = s0?
-      then ret tt
-      else throw $ "Expect source " ++ to_string s0
-                 ++ ", but observed " ++ to_string s
-    end;;
     if d = d0?
-    then match p0, p with
+    then
+      if s = s0? then
+         match p0, p with
          | inl _, inr _ => throw "Expect request but observed response"
          | inr _, inl _ => throw "Expect response but observed request"
          | inl r0, inl r =>
@@ -87,6 +75,8 @@ Definition dualize {E R} `{Is__oE E} (e : netE R) : itree E R :=
            end
          | inr r0, inr r => embed Unify__Response r0 r
          end
+      else throw $ "Expect source " ++ to_string s0
+                 ++ ", but observed " ++ to_string s
     else throw $ "Expect destination " ++ to_string d0
                ++ ", but observed " ++ to_string d
   end%string.
@@ -120,31 +110,6 @@ Definition list_to_string {A} `{Serialize A} (l : list A) : string :=
 Definition liftState {S A} {F : Type -> Type} `{Functor F} (aF : F A)
   : Monads.stateT S F A :=
   fun s : S => pair s <$> aF.
-
-Definition logger__o {E R} `{Is__oE E} (m : itree oE R)
-  : Monads.stateT (list traceT) (itree E) R :=
-  interp
-    (fun _ e =>
-       match e with
-       | (Throw err|) =>
-         fun s =>
-           embed Log ("Failing trace: " ++ CRLF ++ list_to_string (rev' s));;
-           throw err
-       | (||||e) =>
-         match e in observeE Y return Monads.stateT _ _ Y with
-         | Observe__ToServer ss c =>
-           fun s =>
-             pkt <- embed Observe__ToServer ss c;;
-             ret (Trace__In  pkt::s, pkt)
-         | Observe__FromServer =>
-           fun s =>
-             pkt <- embed Observe__FromServer;;
-             ret (Trace__Out pkt::s, pkt)
-         end
-       | (|e|)
-       | (||e|)
-       | (|||e|) => liftState $ trigger e
-       end%string) m.
 
 Definition observer {E R} `{Is__oE E} (m : itree nE R) : itree E R :=
   (* snd <$> logger__o (observer' m) []. *)

@@ -1,5 +1,7 @@
 From Coq Require Export
      Nat.
+From IShrink Require Export
+     IShrink.
 From HTTP Require Export
      Instances
      Semantics.
@@ -7,43 +9,15 @@ Export SumNotations.
 Open Scope nat_scope.
 Open Scope sum_scope.
 
-Definition payloadT exp_ : Type := http_request id + http_response exp_.
-
 Variant connT :=
   Conn__User      : clientT -> connT
-| Conn__Server
-| Conn__Proxy     : clientT -> connT
-| Conn__Authority : authority -> connT.
+| Conn__Server.
 
-Program Instance Decidable_eq__connT (x y : connT) : Decidable (x = y) := {
-  Decidable_witness :=
-    match x, y with
-    | Conn__Server     , Conn__Server => true
-    | Conn__User      x, Conn__User      y
-    | Conn__Proxy     x, Conn__Proxy     y
-    | Conn__Authority x, Conn__Authority y => x = y?
-    | _, _ => false
-    end }.
-Solve Obligations with split; intuition; discriminate.
-Next Obligation.
-  intuition.
-  - destruct x, y; f_equal; try apply Decidable_spec; intuition.
-  - subst.
-    destruct y; try apply Nat.eqb_eq; intuition.
-    destruct a.
-    destruct authority__userinfo, authority__port;
-      repeat (apply andb_true_iff; intuition);
-      try apply eqb_eq; try apply N.eqb_eq; reflexivity.
-Qed.
+Instance Dec_Eq__connT : Dec_Eq connT.
+Proof. dec_eq. Defined.
 
-Record packetT {exp_} :=
-  Packet {
-      packet__src : connT;
-      packet__dst : connT;
-      packet__payload : payloadT exp_
-    }.
-Arguments packetT : clear implicits.
-Arguments Packet {_}.
+Notation payloadT := (payloadT http_request http_response).
+Notation packetT  := (packetT  http_request http_response connT).
 
 Instance Serialize__payloadT : Serialize (payloadT id) :=
   fun p =>
@@ -57,8 +31,6 @@ Instance Serialize__connT : Serialize connT :=
     match c with
     | Conn__User      c => [Atom "User"; to_sexp c]
     | Conn__Server      => [Atom "Server"]
-    | Conn__Proxy     c => [Atom "Proxy"; to_sexp c]
-    | Conn__Authority a => [Atom "Authority"; to_sexp a]
     end%sexp.
 
 Instance Serialize__packetT : Serialize (packetT id) :=
@@ -79,7 +51,7 @@ Proof.
   destruct (f a); simpl; intuition.
 Qed.
 
-Program Fixpoint nodup {A} `{forall x y : A, Decidable (x = y)}
+Program Fixpoint nodup {A} `{Dec_Eq A}
         (l : list A) {measure (length l)} : list A :=
   match l with
   | [] => []
@@ -118,7 +90,7 @@ Definition tcp {E R} `{switchE -< E} `{nondetE -< E} : itree E R :=
        end) ([] : list (packetT exp)).
 
 Variant netE : Type -> Type :=
-  Net__In  : server_state exp -> connT -> netE (packetT exp)
+  Net__In  : server_state exp -> netE (packetT exp)
 | Net__Out : packetT exp -> netE unit.
 
 Class Is__nE E `{netE -< E} `{nondetE -< E} `{logE -< E} `{symE exp -< E}.
@@ -127,18 +99,13 @@ Instance nE_Is__nE : Is__nE nE. Defined.
 
 Definition packet_to_server {exp_} (p : packetT exp_) : bool :=
   match packet__dst p with
-  | Conn__Server | Conn__Proxy _ => true
-  | _ => false
+  | Conn__Server => true
+  | Conn__User _ => false
   end.
 Definition packet_from_user {exp_} (p : packetT exp_) : bool :=
   match packet__src p with
   | Conn__User _ => true
-  | _            => false
-  end.
-Definition packet_to_proxy {exp_} (c0 : clientT) (p : packetT exp_) : bool :=
-  match packet__dst p with
-  | Conn__Proxy c => c0 = c?
-  | _            => false
+  | Conn__Server => false
   end.
 
 CoFixpoint compose' {E R} `{Is__nE E}
@@ -152,7 +119,7 @@ CoFixpoint compose' {E R} `{Is__nE E}
   | TauF net', _ => Tau (compose' conns bfi bfo net' app)
   | _, TauF app' => Tau (compose' conns bfi bfo net  app')
   | VisF vn kn, VisF va ka =>
-    let step__net st c :=
+    let step__net st :=
         match vn with
         | (se|) =>
           match se in switchE Y return (Y -> _) -> _ with
@@ -160,7 +127,7 @@ CoFixpoint compose' {E R} `{Is__nE E}
             fun k =>
               match bfo with
               | [] =>
-                pkt <- embed Net__In st c;;
+                pkt <- embed Net__In st;;
                 Tau (compose' conns bfi []  (k pkt) app)
               | pkt :: bo' =>
                 Tau (compose' conns bfi bo' (k pkt) app)
@@ -188,7 +155,7 @@ CoFixpoint compose' {E R} `{Is__nE E}
       | App__Recv st =>
         fun k =>
           match pick packet_from_user bfi with
-          | None => step__net st Conn__Server
+          | None => step__net st
           | Some (pkt, bi') =>
             let 'Packet s _ p := pkt in
             match s, p with
@@ -200,23 +167,6 @@ CoFixpoint compose' {E R} `{Is__nE E}
         fun k =>
           Tau (compose' conns bfi (bfo ++ [Packet Conn__Server (Conn__User c) (inr r)])
                         net (k tt))
-      | App__Forward h r =>
-        fun k =>
-          let c := length conns in
-          Tau (compose' (put c h conns) bfi
-                        (bfo ++ [Packet (Conn__Proxy c) (Conn__Authority h) (inl r)])
-                        net (k c))
-      | App__Backward st c =>
-        fun k =>
-          match pick (packet_to_proxy c) bfi with
-          | None => step__net st (Conn__Proxy c)
-          | Some (pkt, bi') =>
-            match packet__payload pkt with
-            | inr r =>
-              Tau (compose' conns bi' bfo net (k (unwrap_response r)))
-            | _ => Tau (compose' conns bi' bfo net app) (* drop the packet *)
-            end
-          end
       end ka
     | (|ne|) =>
       match ne in nondetE Y return (Y -> _) -> _ with

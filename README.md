@@ -28,6 +28,7 @@ HTTP specification in Coq, testable and verifiable
   - [OCamlbuild](https://github.com/ocaml/ocamlbuild)
   - [ITreeIO](https://github.com/Lysxia/coq-itree-io)
   - [Parsec](https://github.com/liyishuai/coq-parsec)
+  - [QuickChick](https://github.com/QuickChick/QuickChick/)
 - Coq namespace: `HTTP`
 - Related publication(s):
   - [From C to Interaction Trees:
