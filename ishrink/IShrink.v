@@ -58,12 +58,14 @@ Definition shrink_execute' (exec : scriptT -> IO (bool * traceT))
        match ss with
        | [] => prerr_endline "<<<<< shrink exhausted >>>>";; ret None
        | sc :: ss' =>
+         prerr_endline "<<<<< current script >>>>>>";;
+         prerr_endline (to_string sc);;
          '(b, tr) <- exec sc;;
          if b : bool
-         then prerr_endline "<<<<< accepting trace >>>>>";;
+         then prerr_endline "===== accepting trace =====";;
               prerr_endline (to_string tr);;
               shrink_rec ss'
-         else prerr_endline "<<<<< rejecting trace >>>>>";;
+         else prerr_endline "===== rejecting trace =====";;
               prerr_endline (to_string tr);;
               prerr_endline "<<<<< shrink ended >>>>>>>>";;
               ret (Some sc)

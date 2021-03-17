@@ -95,7 +95,7 @@ Definition send_request (req : http_request id)
         let str : string := request_to_string req in
         buf <- OBytes.of_string str;;
         let len : int := OBytes.length buf in
-        b <- IO.fix_io
+        oc <- IO.fix_io
           (fun send_rec o =>
              sent <- send fd buf o (len - o)%int [];;
              if sent <? int_zero
@@ -109,7 +109,7 @@ Definition send_request (req : http_request id)
                  (*                     ++ to_string c ++ CRLF ++ str);; *)
                  ret (Some (Conn__User c))
                else send_rec (o + sent))%int int_zero;;
-        ret (s, None)
+        ret (s, oc)
   in
     (fun s =>
        '(s', ofdc) <- create_conn s;;
