@@ -16,8 +16,19 @@ Variant connT :=
 Instance Dec_Eq__connT : Dec_Eq connT.
 Proof. dec_eq. Defined.
 
-Notation payloadT := (payloadT http_request http_response).
-Notation packetT  := (packetT  http_request http_response connT).
+Definition payloadT exp_ : Type := http_request id + http_response exp_.
+
+Record packetT {exp_} :=
+  Packet {
+      packet__src : connT;
+      packet__dst : connT;
+      packet__payload : payloadT exp_
+    }.
+Arguments packetT : clear implicits.
+Arguments Packet        {_}.
+Arguments packet__src     {_}.
+Arguments packet__dst     {_}.
+Arguments packet__payload {_}.
 
 Instance Serialize__payloadT : Serialize (payloadT id) :=
   fun p =>

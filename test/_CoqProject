@@ -1,5 +1,5 @@
 -Q ../theories HTTP
+-Q ../ishrink IShrink
 
 Message.v
 ETag.v
-Trace.v

@@ -196,9 +196,9 @@ CoFixpoint match_event {T R} (e0 : testerE R) (r : R) (m : itree stE T)
 Definition match_observe {T R} (e : testerE T) (r : T) (l : list (itree stE R))
   : list (itree stE R) := map (match_event e r) l.
 
-Notation clientE    := (clientE    http_request http_response connT (server_state exp)).
-Notation Client__Send := (Client__Send http_request http_response connT (server_state exp)).
-Notation Client__Recv := (Client__Recv http_request http_response connT (server_state exp)).
+Notation clientE    := (clientE    (packetT id) (server_state exp)).
+Notation Client__Send := (Client__Send (packetT id) (server_state exp)).
+Notation Client__Recv := (Client__Recv (packetT id) (server_state exp)).
 Notation tE := (failureE +' clientE +' nondetE +' logE).
 
 CoFixpoint backtrack' {R} (others : list (itree stE R))

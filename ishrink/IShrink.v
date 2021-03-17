@@ -22,33 +22,26 @@ Open Scope list_scope.
 Section IShrink.
 
 (** ** Scripting Language *)
-Variable expT               : Type -> Type.
-Variable requestT responseT : (Set -> Type) -> Type.
-Context `{Shrink (requestT expT)}.
-Context `{Serialize (requestT expT)} `{Serialize (responseT id)}.
+Variables symreqT requestT responseT : Type.
+Context `{Shrink symreqT} `{Serialize symreqT}.
 
-Definition payloadT exp_ : Type := requestT id + responseT exp_.
+Notation payloadT := (requestT + responseT)%type.
 
 Variable connT      : Type.
 Variable Conn__Server : connT.
 Context `{Serialize connT}.
 Context `{Dec_Eq    connT}.
 
-Record packetT {exp_} :=
-  Packet {
-      packet__src : connT;
-      packet__dst : connT;
-      packet__payload : payloadT exp_
-    }.
-Arguments Packet {_}.
-
-Notation pktT := (@packetT id).
-Context `{Serialize pktT}.
+Variable packetT : Type.
+Variable Packet : connT -> connT -> payloadT -> packetT.
+Variable packet__payload : packetT -> payloadT.
+Variables packet__src packet__dst : packetT -> connT.
+Context `{Serialize packetT}.
 
 Definition labelT := nat.
 
-Definition scriptT := list (labelT * requestT expT).
-Definition traceT  := list (labelT * pktT).
+Definition scriptT := list (labelT * symreqT).
+Definition traceT  := list (labelT * packetT).
 
 Fixpoint repeat_list {A} (n : nat) (l : list A) : list A :=
   match n with
@@ -89,8 +82,8 @@ Definition shrink_execute (first_exec : IO (bool * (scriptT * traceT)))
 Variable gen_state : Type.
 
 Variant clientE : Type -> Type :=
-  Client__Recv : clientE (option pktT)
-| Client__Send : gen_state -> clientE (option pktT).
+  Client__Recv : clientE (option packetT)
+| Client__Send : gen_state -> clientE (option packetT).
 
 Variable otherE : Type -> Type.
 Variable other_handler : otherE ~> IO.
@@ -99,13 +92,12 @@ Arguments other_handler {_}.
 Definition failureE := (exceptE string).
 Notation tE := (failureE +' clientE +' otherE).
 
-Variable instantiate_request : traceT -> requestT expT -> requestT id.
-Variable gen_request   : gen_state -> traceT -> IO (requestT expT).
+Variable instantiate_request : traceT -> symreqT -> requestT.
+Variable gen_request   : gen_state -> traceT -> IO symreqT.
 Variable conn_state    : Type.
 Variable init_state    : conn_state.
-Variable recv_response : Monads.stateT conn_state IO (option pktT).
-Variable send_request  :
-  requestT id -> Monads.stateT conn_state IO (option connT).
+Variable recv_response : Monads.stateT conn_state IO (option packetT).
+Variable send_request  : requestT -> Monads.stateT conn_state IO (option connT).
 
 Fixpoint execute' {R} (fuel : nat) (s : conn_state)
          (oscript : option scriptT) (acc : scriptT * traceT) (m : itree tE R)
@@ -153,10 +145,10 @@ Fixpoint execute' {R} (fuel : nat) (s : conn_state)
                 end;;
                 match ostep with
                 | Some ((n, rx) as step) =>
-                  let req : requestT id := instantiate_request trace0 rx in
+                  let req : requestT := instantiate_request trace0 rx in
                   '(s', oc) <- send_request req s;;
                   if oc is Some c
-                  then let pkt : pktT := Packet c Conn__Server (inl req) in
+                  then let pkt : packetT := Packet c Conn__Server (inl req) in
                        execute' fuel s' osc'
                                 (script0 ++ [step], trace0 ++ [(n, pkt)])
                                 (k (Some pkt))
@@ -182,9 +174,3 @@ Definition test {R} (m : itree tE R) : IO bool :=
                  (fmap (fun '(b, (_, t)) => (b, t)) ∘ execute m ∘ Some).
 
 End IShrink.
-
-Arguments packetT : clear implicits.
-Arguments Packet        {_ _ _ _}.
-Arguments packet__src     {_ _ _ _}.
-Arguments packet__dst     {_ _ _ _}.
-Arguments packet__payload {_ _ _ _}.

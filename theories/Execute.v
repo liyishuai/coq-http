@@ -9,9 +9,6 @@ From IShrink Require Export
      IShrink.
 Open Scope string_scope.
 
-Notation payloadT := (payloadT http_request http_response).
-Notation packetT  := (packetT  http_request http_response connT).
-
 Fixpoint findResponse (s : conn_state)
   : IO (conn_state * option (packetT id)) :=
   match s with
@@ -98,7 +95,7 @@ Instance Serialize__request {exp_} `{Serialize (exp_ field_value)}
     to_sexp fields;
     Atom $ body_to_string obody]%sexp.
 
-Notation traceT := (traceT http_request http_response connT).
+Notation traceT := (traceT (packetT id)).
 
 Definition get_tag (pkt : packetT id) : option field_value :=
   if packet__payload pkt is inr res
@@ -170,14 +167,18 @@ Definition other_handler : nondetE +' logE ~> IO :=
 Arguments test : default implicits.
 
 Definition test_http : IO bool :=
-  test texp
-       (requestT:=http_request)
-       (responseT:=http_response)
+  test (symreqT:=http_request texp)
+       (requestT:=http_request id)
+       (responseT:=http_response id)
        Shrink__request
        Serialize__request
        (connT:=connT)
        Conn__Server
        Dec_Eq__connT
+       (packetT:=packetT id)
+       Packet
+       packet__src
+       packet__dst
        Serialize__packetT
        (gen_state:=server_state exp)
        (otherE:=nondetE +' logE)
