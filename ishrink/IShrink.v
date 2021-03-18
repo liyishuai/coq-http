@@ -21,27 +21,53 @@ Open Scope list_scope.
 
 Section IShrink.
 
-(** ** Scripting Language *)
-Variables symreqT requestT responseT : Type.
+(** ** Types, instances, and fucntions to implement. *)
+
+(** Symbolic request type, for scripting purposes. *)
+Variable symreqT : Type.
 Context `{Shrink symreqT} `{Serialize symreqT}.
 
+Variables requestT responseT : Type.
 Notation payloadT := (requestT + responseT)%type.
 
 Variable connT      : Type.
 Variable Conn__Server : connT.
-Context `{Serialize connT}.
-Context `{Dec_Eq    connT}.
+Context `{Serialize connT} `{Dec_Eq connT}.
 
 Variable packetT : Type.
 Variable Packet : connT -> connT -> payloadT -> packetT.
-Variable packet__payload : packetT -> payloadT.
-Variables packet__src packet__dst : packetT -> connT.
+Variable packet__payload       : packetT -> payloadT.
+Variable packet__src packet__dst : packetT -> connT.
 Context `{Serialize packetT}.
 
-Definition labelT := nat.
-
+Definition labelT  := nat.
 Definition scriptT := list (labelT * symreqT).
 Definition traceT  := list (labelT * packetT).
+
+(** Model state exposed for request generation purposes. *)
+Variable gen_state : Type.
+Variant clientE : Type -> Type :=
+  Client__Recv : clientE (option packetT)
+| Client__Send : gen_state -> clientE (option packetT).
+
+Definition failureE := (exceptE string).
+
+(** Events other than [clientE] and [failureE]. *)
+Variable otherE : Type -> Type.
+Variable other_handler : otherE ~> IO.
+Arguments other_handler {_}.
+
+Notation tE := (failureE +' clientE +' otherE).
+
+Variable instantiate_request : traceT -> symreqT -> requestT.
+Variable gen_request   : gen_state -> traceT -> IO symreqT.
+Variable conn_state    : Type.
+Variable init_state    : conn_state.
+Variable recv_response : Monads.stateT conn_state IO (option packetT).
+Variable send_request  : requestT -> Monads.stateT conn_state IO (option connT).
+Variable cleanup : conn_state -> IO unit.
+
+(* begin hide *)
 
 Fixpoint repeat_list {A} (n : nat) (l : list A) : list A :=
   match n with
@@ -78,28 +104,6 @@ Definition shrink_execute (first_exec : IO (bool * (scriptT * traceT)))
   then ret true
   else IO.while_loop (shrink_execute' then_exec) sc;;
        ret false.
-
-(** ** Testing Language *)
-
-Variable gen_state : Type.
-
-Variant clientE : Type -> Type :=
-  Client__Recv : clientE (option packetT)
-| Client__Send : gen_state -> clientE (option packetT).
-
-Variable otherE : Type -> Type.
-Variable other_handler : otherE ~> IO.
-Arguments other_handler {_}.
-
-Definition failureE := (exceptE string).
-Notation tE := (failureE +' clientE +' otherE).
-
-Variable instantiate_request : traceT -> symreqT -> requestT.
-Variable gen_request   : gen_state -> traceT -> IO symreqT.
-Variable conn_state    : Type.
-Variable init_state    : conn_state.
-Variable recv_response : Monads.stateT conn_state IO (option packetT).
-Variable send_request  : requestT -> Monads.stateT conn_state IO (option connT).
 
 Fixpoint execute' {R} (fuel : nat) (s : conn_state)
          (oscript : option scriptT) (acc : scriptT * traceT) (m : itree tE R)
@@ -163,13 +167,15 @@ Fixpoint execute' {R} (fuel : nat) (s : conn_state)
     end
   end.
 
-Variable cleanup : conn_state -> IO unit.
-
 Definition execute {R} (m : itree tE R) (oscript : option scriptT)
   : IO (bool * (scriptT * traceT)) :=
   '(b, s, t') <- execute' 5000 init_state oscript ([], []) m;;
   cleanup s;;
   ret (b, t').
+
+(* end hide *)
+
+(** ** From client ITree to shrink-testing program *)
 
 Definition test {R} (m : itree tE R) : IO bool :=
   shrink_execute (execute m None)
