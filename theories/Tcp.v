@@ -1,7 +1,5 @@
 From Coq Require Export
      Nat.
-From IShrink Require Export
-     IShrink.
 From HTTP Require Export
      Instances
      Semantics.

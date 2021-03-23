@@ -19,55 +19,64 @@ Open Scope sum_scope.
 Open Scope string_scope.
 Open Scope list_scope.
 
-Section IShrink.
-
-(** ** Types, instances, and fucntions to implement. *)
-
-(** Symbolic request type, for scripting purposes. *)
-Variable symreqT : Type.
-Context `{Shrink symreqT} `{Serialize symreqT}.
-
-Variables requestT responseT : Type.
-Notation payloadT := (requestT + responseT)%type.
-
-Variable connT      : Type.
-Variable Conn__Server : connT.
-Context `{Serialize connT} `{Dec_Eq connT}.
-
-Variable packetT : Type.
-Variable Packet : connT -> connT -> payloadT -> packetT.
-Variable packet__payload       : packetT -> payloadT.
-Variable packet__src packet__dst : packetT -> connT.
-Context `{Serialize packetT}.
-
-Definition labelT  := nat.
-Definition scriptT := list (labelT * symreqT).
-Definition traceT  := list (labelT * packetT).
-
-(** Model state exposed for request generation purposes. *)
-Variable gen_state : Type.
-Variant clientE : Type -> Type :=
+Variant clientE {packetT gen_state : Type} : Type -> Type :=
   Client__Recv : clientE (option packetT)
 | Client__Send : gen_state -> clientE (option packetT).
 
-Definition failureE := (exceptE string).
+Definition labelT := nat.
+Definition scriptT {symreqT : Type} := list (labelT * symreqT).
+Definition traceT  {packetT : Type} := list (labelT * packetT).
+
+Module Type IShrinkSIG.
+
+Parameters requestT responseT : Type.
+Notation payloadT := (requestT + responseT)%type.
+
+Parameter connT      : Type.
+Parameter Conn__Server : connT.
+Declare Instance Serialize__connT : Serialize connT.
+Declare Instance Dec_Eq__connT : Dec_Eq connT.
+
+Parameter packetT : Type.
+Parameter Packet : connT -> connT -> payloadT -> packetT.
+Parameter packet__payload       : packetT -> payloadT.
+Parameter packet__src packet__dst : packetT -> connT.
+Declare Instance Serialize__packetT : Serialize packetT.
+
+(** Model state exposed for request generation purposes. *)
+Parameter gen_state : Type.
+
+Notation failureE := (exceptE string).
 
 (** Events other than [clientE] and [failureE]. *)
-Variable otherE : Type -> Type.
-Variable other_handler : otherE ~> IO.
+Parameter otherE : Type -> Type.
+Parameter other_handler : otherE ~> IO.
 Arguments other_handler {_}.
+Notation tE := (failureE +' @clientE packetT gen_state +' otherE).
 
-Notation tE := (failureE +' clientE +' otherE).
+Parameter conn_state    : Type.
+Parameter init_state    : conn_state.
+Parameter recv_response : Monads.stateT conn_state IO (option packetT).
+Parameter send_request  : requestT -> Monads.stateT conn_state IO (option connT).
+Parameter cleanup : conn_state -> IO unit.
 
-Variable instantiate_request : traceT -> symreqT -> requestT.
-Variable gen_request   : gen_state -> traceT -> IO symreqT.
-Variable conn_state    : Type.
-Variable init_state    : conn_state.
-Variable recv_response : Monads.stateT conn_state IO (option packetT).
-Variable send_request  : requestT -> Monads.stateT conn_state IO (option connT).
-Variable cleanup : conn_state -> IO unit.
+(** Symbolic request type, for scripting purposes. *)
+Parameter symreqT : Type.
+Declare Instance Shrink__symreqT    : Shrink symreqT.
+Declare Instance Serialize__symreqT : Serialize symreqT.
 
-(* begin hide *)
+Notation scriptT := (@scriptT symreqT).
+Notation traceT  := (@traceT packetT).
+
+Parameter instantiate_request : traceT -> symreqT -> requestT.
+Parameter gen_request : gen_state -> traceT -> IO symreqT.
+
+Parameter tester : itree tE void.
+
+End IShrinkSIG.
+
+Module IShrink (M : IShrinkSIG).
+Include M.
 
 Fixpoint repeat_list {A} (n : nat) (l : list A) : list A :=
   match n with
@@ -177,8 +186,8 @@ Definition execute {R} (m : itree tE R) (oscript : option scriptT)
 
 (** ** From client ITree to shrink-testing program *)
 
-Definition test {R} (m : itree tE R) : IO bool :=
-  shrink_execute (execute m None)
-                 (fmap (fun '(b, (_, t)) => (b, t)) ∘ execute m ∘ Some).
+Definition test : IO bool :=
+  shrink_execute (execute tester None)
+                 (fmap (fun '(b, (_, t)) => (b, t)) ∘ execute tester ∘ Some).
 
 End IShrink.

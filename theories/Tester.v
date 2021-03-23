@@ -1,3 +1,5 @@
+From IShrink Require Export
+     IShrink.
 From ExtLib Require Export
      OptionMonad.
 From HTTP Require Export
@@ -196,18 +198,19 @@ CoFixpoint match_event {T R} (e0 : testerE R) (r : R) (m : itree stE T)
 Definition match_observe {T R} (e : testerE T) (r : T) (l : list (itree stE R))
   : list (itree stE R) := map (match_event e r) l.
 
-Notation clientE    := (clientE    (packetT id) (server_state exp)).
-Notation Client__Send := (Client__Send (packetT id) (server_state exp)).
-Notation Client__Recv := (Client__Recv (packetT id) (server_state exp)).
-Notation tE := (failureE +' clientE +' nondetE +' logE).
+Notation clientE := (@clientE (packetT id) (server_state exp)).
 
-CoFixpoint backtrack' {R} (others : list (itree stE R))
-           (m : itree stE R) : itree tE R :=
+Class Is__tE E`{failureE -< E} `{clientE -< E} `{nondetE -< E} `{logE -< E}.
+Notation tE := (failureE +' clientE +' nondetE +' logE).
+Instance tE_Is__tE : Is__tE tE. Defined.
+
+CoFixpoint backtrack' {E R} `{Is__tE E} (others : list (itree stE R))
+           (m : itree stE R) : itree E R :=
   match observe m with
   | RetF r => Ret r
   | TauF m' => Tau (backtrack' others m')
   | VisF e k =>
-    let catch (err : string) : itree tE R :=
+    let catch (err : string) : itree E R :=
         match others with
         | [] => throw err
         | other :: others' =>
@@ -234,7 +237,7 @@ CoFixpoint backtrack' {R} (others : list (itree stE R))
               match op1 with
               | Some p1 =>
                 match match_observe Tester__Recv p1 others with
-                | [] => throw "Unexpected receive from server"
+                | [] => catch "Unexpected receive from server"
                 | other :: others' =>
                   Tau (backtrack' others' other)
                 end
@@ -267,8 +270,8 @@ CoFixpoint backtrack' {R} (others : list (itree stE R))
     end
   end.
 
-Definition backtrack {R} : itree stE R -> itree tE R :=
+Definition backtrack {E R} `{Is__tE E} : itree stE R -> itree E R :=
   backtrack' [].
 
-Definition tester {R} : itree oE R -> itree tE R :=
+Definition tester {E R} `{Is__tE E} : itree oE R -> itree E R :=
   backtrack ∘ unifier.

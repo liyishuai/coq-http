@@ -5,8 +5,6 @@ From HTTP Require Export
      NetUnix
      Parser
      Tester.
-From IShrink Require Export
-     IShrink.
 Open Scope string_scope.
 
 Fixpoint findResponse (s : conn_state)
@@ -95,8 +93,6 @@ Instance Serialize__request {exp_} `{Serialize (exp_ field_value)}
     to_sexp fields;
     Atom $ body_to_string obody]%sexp.
 
-Notation traceT := (traceT (packetT id)).
-
 Definition get_tag (pkt : packetT id) : option field_value :=
   if packet__payload pkt is inr res
   then findField "ETag" $ response__fields res
@@ -152,7 +148,7 @@ Definition instantiate_request (tr : traceT) (rx : http_request texp)
   let fs := map (fun '(Field n vx) => Field n (instantiate_field tr vx)) fx in
   Request l fs b.
 
-Definition http_tester : itree tE void :=
+Definition http_tester {E} `{Is__tE E} : itree E void :=
   tester $ observer $ compose_switch tcp http_smi.
 
 Instance Shrink__request : Shrink (http_request texp) := { shrink _ := [] }.
@@ -164,32 +160,48 @@ Definition other_handler : nondetE +' logE ~> IO :=
                     prerr_endline str
           end.
 
-Arguments test : default implicits.
+Definition cleanup (s : conn_state) : IO unit :=
+  fold_left (fun m fd => OUnix.close fd;; m)
+            (map (fst ∘ snd) s) (ret tt).
+
+Module HttpTypes : IShrinkSIG.
+
+Definition requestT            := http_request id.
+Definition responseT           := http_response id.
+
+Definition symreqT             := http_request texp.
+Definition Shrink__symreqT       := Shrink__request.
+Definition Serialize__symreqT    := @Serialize__request texp _.
+Definition instantiate_request := instantiate_request.
+Definition gen_state           := server_state exp.
+Definition gen_request         := gen_request.
+
+Definition connT               := connT.
+Definition Conn__Server          := Conn__Server.
+Definition Serialize__connT      := Serialize__connT.
+Definition Dec_Eq__connT         := Dec_Eq__connT.
+
+Definition packetT             := packetT id.
+Definition Packet              := @Packet id.
+Definition packet__payload       := @packet__payload id.
+Definition packet__src           := @packet__src id.
+Definition packet__dst           := @packet__dst id.
+Definition Serialize__packetT    := Serialize__packetT.
+
+Definition otherE              := nondetE +' logE.
+Definition other_handler       := other_handler.
+
+Definition conn_state          := conn_state.
+Definition init_state          := [] : conn_state.
+Definition recv_response       := recv_bytes;; findResponse.
+Definition send_request        := send_request.
+Definition cleanup             := cleanup.
+
+Definition tester              := http_tester.
+
+End HttpTypes.
+
+Module TestHTTP := IShrink HttpTypes.
 
 Definition test_http : IO bool :=
-  test (symreqT:=http_request texp)
-       (requestT:=http_request id)
-       (responseT:=http_response id)
-       Shrink__request
-       Serialize__request
-       (connT:=connT)
-       Conn__Server
-       Dec_Eq__connT
-       (packetT:=packetT id)
-       Packet
-       packet__src
-       packet__dst
-       Serialize__packetT
-       (gen_state:=server_state exp)
-       (otherE:=nondetE +' logE)
-       other_handler
-       instantiate_request
-       gen_request
-       (conn_state:=conn_state)
-       []
-       (recv_bytes;; findResponse)
-       send_request
-       (fun s => fold_left (fun m fd => OUnix.close fd;; m)
-                        (map (fst ∘ snd) s) (ret tt))
-       (R:=void)
-       http_tester.
+  TestHTTP.test.
