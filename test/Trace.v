@@ -1,8 +1,7 @@
 From HTTP Require Import
      Execute.
 
-Notation symreqT := (http_request texp).
-Notation scriptT := (scriptT symreqT).
+Import HttpTypes.
 
 Definition getline (p : path) : request_line :=
   RequestLine Method__GET (RequestTarget__Origin p None) (Version 1 1).
@@ -15,7 +14,7 @@ Definition not_modified {exp_} : http_response exp_ :=
 
 Open Scope nat_scope.
 
-Example request0 : symreqT :=
+Fail Example request0 : symreqT :=
   Request (getline "index.html") [] None.
 
 Example request1 : symreqT :=
