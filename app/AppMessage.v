@@ -18,24 +18,25 @@ Coercion string_of_N :=
 Coercion string_of_nat :=
   NilZero.string_of_uint ∘ Nat.to_uint : nat -> string.
 
-Variant swap_request :=
+Variant swap_request {exp_} :=
   Swap__ListOrders
 | Swap__ListAccount (uid : user_id)
-| Swap__TakeOrder (uid : user_id) (oid : order_id)
+| Swap__TakeOrder (uid : user_id) (oid : exp_ order_id)
 | Swap__MakeOrder (uid : user_id)
                 (buyTicker  : assetT) (buyAmount  : amountT)
-                (sellTicker : assetT) (sellAmount : amountT)
+                (sellTicker : assetT) (sellAmount : exp_ amountT)
 | Swap__Deposit  (uid : user_id) (ticker : assetT) (amount : amountT)
-| Swap__Withdraw (uid : user_id) (ticker : assetT) (amount : amountT).
+| Swap__Withdraw (uid : user_id) (ticker : assetT) (amount : exp_ amountT).
+Arguments swap_request : clear implicits.
 
-Definition swap_method (req : swap_request) : request_method :=
+Definition swap_method (req : swap_request id) : request_method :=
   match req with
   | Swap__ListOrders    | Swap__ListAccount _   => Method__GET
   | Swap__TakeOrder _ _ | Swap__MakeOrder _ _ _ _ _
   | Swap__Deposit _ _ _ | Swap__Withdraw  _ _ _ => Method__POST
   end.
 
-Definition swap_form (req : swap_request) : form :=
+Definition swap_form (req : swap_request id) : form :=
   match req with
   | Swap__ListOrders => []
   | Swap__ListAccount uid => [("user", string_of_N uid)]
@@ -55,18 +56,18 @@ Definition swap_form (req : swap_request) : form :=
     ("amount", string_of_N amount)]
   end.
 
-Definition swap_target (req : swap_request) : request_target :=
-  let q : query := form_to_string (swap_form req) in
+Definition swap_target (req : swap_request id) : request_target :=
   match req with
-  | Swap__ListAccount _       => RequestTarget__Origin "/listAccount" (Some q)
   | Swap__ListOrders          => RequestTarget__Origin "/listOrders" None
   | Swap__TakeOrder _ _       => RequestTarget__Origin "/takeOrder"  None
   | Swap__MakeOrder _ _ _ _ _ => RequestTarget__Origin "/makeOrder"  None
   | Swap__Deposit   _ _ _     => RequestTarget__Origin "/deposit"    None
   | Swap__Withdraw  _ _ _     => RequestTarget__Origin "/withdraw"   None
+  | Swap__ListAccount _       => RequestTarget__Origin "/listAccount"
+                             (Some (form_to_string (swap_form req)))
   end.
 
-Definition swap_body (req : swap_request) : option message_body :=
+Definition swap_body (req : swap_request id) : option message_body :=
   match req with
   | Swap__ListAccount _ | Swap__ListOrders => None
   | Swap__TakeOrder _ _ | Swap__MakeOrder _ _ _ _ _
@@ -74,7 +75,7 @@ Definition swap_body (req : swap_request) : option message_body :=
                         Some (form_to_string (swap_form req))
   end.
 
-Definition encode_request (req : swap_request) : http_request id :=
+Definition encode_request (req : swap_request id) : http_request id :=
   let method : request_method := swap_method req in
   let target : request_target := swap_target req in
   let line   : request_line   := RequestLine method target (Version 1 1) in
