@@ -23,6 +23,7 @@ depends: [
   "coq-itree-io" { >= "0.1.0" }
   "coq-parsec" { >= "0.1.0" }
   "coq-quickchick" 
+  "coq-json" 
 ]
 
 tags: [

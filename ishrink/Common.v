@@ -10,20 +10,31 @@ Export
   IfNotations
   ListNotations.
 
-Definition get {K V} `{Dec_Eq K} (k : K) :
-  list (K * V) -> option V :=
-  fmap snd ∘ find ((fun kv => k = fst kv?)).
+Definition get' {K V} (eqb : K -> K -> bool) (k : K)
+  : list (K * V) -> option V :=
+  fmap snd ∘ find (eqb k ∘ fst).
 
-Definition delete {K V} `{Dec_Eq K} (k : K) :
-  list (K * V) -> list (K * V) :=
-  filter (fun kv => (k <> fst kv?)).
+Definition get {K V} `{Dec_Eq K}
+  : K -> list (K * V) -> option V :=
+  get' (fun k k' => k = k'?).
+
+Definition delete' {K V} (eqb : K -> K -> bool) (k : K)
+  : list (K * V) -> list (K * V) :=
+  filter (negb ∘ eqb k ∘ fst).
+
+Definition delete {K V} `{Dec_Eq K}
+  : K -> list (K * V) -> list (K * V) :=
+  delete' (fun k k' => k = k'?).
 
 Definition put {K V} : K -> V -> list (K * V) -> list (K * V) :=
   compose cons ∘ pair.
 
-Definition update {K V} `{Dec_Eq K} (k : K) (v : V)
+Definition update' {K V} (eqb : K -> K -> bool) (k : K) (v : V)
   : list (K * V) -> list (K * V) :=
-  put k v ∘ delete k.
+  put k v ∘ delete' eqb k.
+
+Definition update {K V} `{Dec_Eq K} : K -> V -> list (K * V) -> list (K * V) :=
+  update' (fun k k' => k = k'?).
 
 Fixpoint pick {A} (f : A -> bool) (l : list A) : option (A * list A) :=
   if l is a :: tl

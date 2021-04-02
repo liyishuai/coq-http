@@ -143,7 +143,7 @@ Definition decode_response (res : http_response id)
   | 404 => Some Response__NotFound
   | 200 =>
     body <- (ob : option string);;
-    if from_string body is Parser.MenhirLibParser.Inter.Parsed_pr j _
+    if from_string body is inr j
     then Response__Account     <$> getAccount          j
      <|> Response__Order       <$> getOrder            j
      <|> Response__ListAccount <$> get_list getAccount j

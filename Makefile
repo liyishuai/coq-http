@@ -20,6 +20,7 @@ uninstall: $(COQMAKEFILE)
 clean: $(COQMAKEFILE)
 	@+$(MAKE) -f $^ cleanall
 	@rm -f $^ $^.conf */*~
+	$(MAKE) -C extract $@
 
 $(COQMAKEFILE): _CoqProject
 	$(COQBIN)coq_makefile -f $^ -o $@

@@ -37,6 +37,9 @@ dependencies:
   - description: '[QuickChick](https://github.com/QuickChick/QuickChick/)'
     opam:
       name: coq-quickchick
+  - description: '[JSON](https://github.com/liyishuai/coq-json)'
+    opam:
+      name: coq-json
 test_target: test
 install_flag: INSTALLDIR=%{bin}%
 categories:
