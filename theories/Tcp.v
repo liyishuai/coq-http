@@ -11,7 +11,7 @@ Variant connT :=
   Conn__User      : clientT -> connT
 | Conn__Server.
 
-Instance Dec_Eq__connT : Dec_Eq connT.
+Global Instance Dec_Eq__connT : Dec_Eq connT.
 Proof. dec_eq. Defined.
 
 Definition payloadT exp_ : Type := http_request id + http_response exp_.

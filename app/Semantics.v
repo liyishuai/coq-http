@@ -2,7 +2,7 @@ From App Require Export
      AppMessage.
 From ITree Require Export
      ITree.
-From HTTP Require Export
+From HTTP Require Import
      Semantics.
 
 Variant appE {requestT responseT server_state} : Type -> Type :=
