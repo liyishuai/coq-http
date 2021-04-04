@@ -110,4 +110,4 @@ Definition compose_switch {q r s E NE} `{Is__nE q r s E NE}
   : itree (appE q r s +' E) void -> itree NE void :=
   compose' (q:=q) (r:=r) (s:=s) [] [] tcp.
 
-Definition tcp_swap initial_state := compose_switch (swap_smi initial_state).
+Definition tcp_swap := compose_switch ∘ swap_smi.

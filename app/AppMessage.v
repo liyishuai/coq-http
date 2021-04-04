@@ -7,10 +7,13 @@ From Parsec Require Export
 From JSON Require Export
      Lexer
      JSON.
+From QuickChick Require Export
+     Decidability.
 From ExtLib Require Export
      Monad
      OptionMonad.
 From Coq Require Export
+     Bool
      DecimalString
      NArith.
 Export
@@ -18,6 +21,7 @@ Export
   MonadNotation.
 Open Scope parser_scope.
 Open Scope monad_scope.
+Open Scope lazy_bool_scope.
 
 Definition user_id  := N.
 Definition order_id := N.
@@ -40,6 +44,9 @@ Variant swap_request {exp_} :=
 | Request__Deposit   (uid : user_id) (ticker : assetT) (amount :      amountT)
 | Request__Withdraw  (uid : user_id) (ticker : assetT) (amount : exp_ amountT).
 Arguments swap_request : clear implicits.
+
+Instance Dec_Eq__request : Dec_Eq (swap_request id).
+Proof. dec_eq. Defined.
 
 Definition swap_method (req : swap_request id) : request_method :=
   match req with
