@@ -2,7 +2,7 @@ From App Require Export
      AppMessage.
 From ITree Require Export
      ITree.
-From HTTP Require Import
+From HTTP Require Export
      Semantics.
 
 Variant appE {requestT responseT server_state} : Type -> Type :=
@@ -10,16 +10,23 @@ Variant appE {requestT responseT server_state} : Type -> Type :=
 | App__Send : clientT -> responseT -> appE unit.
 Arguments appE : clear implicits.
 
-Inductive exp : Type -> Set :=
+Inductive exp : Type -> Type :=
   Exp__Var   : var -> exp N
 | Exp__Const : N   -> exp N
-| Exp__Add   : exp N ->   N -> exp N
-| Exp__Sub   : exp N ->   N -> exp N
-| Exp__Leb   : N   -> exp N -> exp bool.
+| Exp__Nth   : exp N -> list (exp N) -> exp nat.
+
+Fixpoint exp_to_sexp {T} (e : exp T) : sexp :=
+  match e with
+  | Exp__Var   x => [Atom "Variable"; to_sexp x]
+  | Exp__Const n => [Atom "Number"; to_sexp n]
+  | Exp__Nth x l => [Atom "Nth"; exp_to_sexp x; List (map exp_to_sexp l)]
+  end%sexp.
+
+Instance Serialzie__exp {T} : Serialize (exp T) := exp_to_sexp.
 
 Variant symE : Type -> Type :=
-  Sym__Fresh  : symE (exp N)
-| Sym__Decide : exp bool -> symE bool.
+  Sym__Fresh : symE (exp N)
+| Sym__Eval  : exp nat -> symE nat.
 
 Class  Is__smE q r s E `{appE q r s -< E} `{symE -< E}.
 Notation smE q r s := (appE q r s +' symE).
@@ -43,36 +50,36 @@ Definition findAccount {exp_} (uid : user_id) (ticker : assetT)
   let '(_, (u, t, _)) := a in
   (uid =? u) &&& (ticker =? t).
 
-Fixpoint eqb_exp {X Y} (x : exp X) (y : exp Y) : bool :=
-  match x, y with
-  | Exp__Var   a, Exp__Var   b
-  | Exp__Const a, Exp__Const b => a =? b
-  | Exp__Add x a, Exp__Add y b
-  | Exp__Sub x a, Exp__Sub y b
-  | Exp__Leb a x, Exp__Leb b y => eqb_exp x y &&& (a =? b)
-  | _, _ => false
-  end.
+Definition getx {V E} `{symE -< E} (k : exp N) (l : list (exp N * V))
+  : itree E (option V) :=
+  n <- embed Sym__Eval (Exp__Nth k (map fst l));;
+  ret (snd <$> nth_error l n).
 
-Definition getx {V} : exp N -> list (exp N * V) -> option V := get' eqb_exp.
-Definition updatex {V} : exp N -> V -> list (exp N * V) -> list (exp N * V) :=
-  update' eqb_exp.
+Definition replace {V} (n : nat) (v : V) (l : list V) : list V :=
+  firstn n l ++ v :: skipn (S n) l.
 
-Definition credit (aid : exp account_id) (amount : amountT)
-  : Monads.state (swap_state exp) (swap_response exp) :=
+Definition updatex {V E} `{symE -< E} (k : exp N) (v : V) (l : list (exp N * V))
+  : itree E (list (exp N * V)) :=
+  n <- embed Sym__Eval (Exp__Nth k (map fst l));;
+  ret (replace n (k, v) l).
+
+Definition credit {E} `{symE -< E} (aid : exp account_id) (amount : amountT)
+  : Monads.stateT (swap_state exp) (itree E) (swap_response exp) :=
   fun ss =>
     let (accounts, orders) := ss in
-    if getx aid accounts is Some (uid, ticker, x)
-    then let acnt' := (uid, ticker, Exp__Add x amount) in
-         (updatex aid acnt' accounts, orders,
-          Response__Account (aid, acnt'))
-    else (ss, Response__NotFound).
+    oa <- getx aid accounts;;
+    if oa is Some (uid, ticker, x)
+    then let acnt' := (uid, ticker, x + amount) in
+         accounts' <- updatex aid acnt' accounts;;
+         ret (accounts', orders, Response__Account (aid, acnt'))
+    else ret (ss, Response__NotFound).
 
 Definition create {E} `{symE -< E} (uid : user_id) (ticker : assetT)
   : Monads.stateT (swap_state exp) (itree E) (exp account_id) :=
   fun ss =>
     let (accounts, orders) := ss in
     xaid <- trigger Sym__Fresh;;
-    ret (put xaid (uid, ticker, Exp__Const 0) accounts, orders, xaid).
+    ret (put xaid (uid, ticker, 0) accounts, orders, xaid).
 
 Definition locate {E} `{symE -< E} (uid : user_id) (ticker : assetT)
   : Monads.stateT (swap_state exp) (itree E) (exp account_id) :=
@@ -88,18 +95,18 @@ Definition deposit {E} `{symE -< E}
   fun ss =>
     let (accounts, orders) := ss in
     '(s1, aid) <- locate uid ticker ss;;
-    ret (credit aid amount s1).
+    credit aid amount s1.
 
 Definition debit {E} `{symE -< E} (aid : exp account_id) (amount : amountT)
   : Monads.stateT (swap_state exp) (itree E) (swap_response exp) :=
   fun ss =>
     let (accounts, orders) := ss in
-    if getx aid accounts is Some (uid, ticker, x)
-    then b <- embed Sym__Decide (Exp__Leb amount x);;
-         if b : bool
-         then let acnt' := (uid, ticker, Exp__Sub x amount) in
-              ret (updatex aid acnt' accounts, orders,
-                   Response__Account (aid, acnt'))
+    oa <- getx aid accounts;;
+    if oa is Some (uid, ticker, x)
+    then if amount <=? x
+         then let acnt' := (uid, ticker, x - amount) in
+              accounts' <- updatex aid acnt' accounts;;
+              ret (accounts', orders, Response__Account (aid, acnt'))
          else ret (ss, Response__InsufficientFund)
     else ret (ss, Response__NotFound).
 
@@ -122,7 +129,7 @@ Definition swap_handler E `(symE -< E) (req : swap_request id)
       let acs : list (accountT exp) :=
           filter (N.eqb uid ∘ fst ∘ fst ∘ snd) accounts in
       ret (ss, Response__ListAccount acs)
-    | Request__Deposit  uid ticker amount => deposit  uid ticker amount ss
+    | Request__Deposit  uid ticker amount => deposit uid ticker amount ss
     | Request__Withdraw uid ticker amount => withdraw uid ticker amount ss
     | Request__MakeOrder uid bt ba st sa =>
       '(s1, r1) <- withdraw uid st sa ss;;
@@ -135,18 +142,24 @@ Definition swap_handler E `(symE -< E) (req : swap_request id)
       else ret (ss, r1)
     | Request__TakeOrder uid oid =>
       let coid : exp order_id := Exp__Const oid in
-      if getx coid orders is Some (bid, ba, sid, sa)
-      then if (getx bid accounts, getx sid accounts)
-                is (Some (_, bt, _), Some (_, st, _))
-           then '(s1, r1) <- withdraw uid bt ba ss;;
-                if r1 is Response__Account _
-                then let (s2, r2) := credit bid ba s1 in
-                     if r2 is Response__Account _
-                     then '(s3, r3) <- deposit uid st sa s2;;
-                          ret (if r3 is Response__Account _ then s3 else ss, r3)
-                     else ret (ss, r2)
-                else ret (ss, r1)
-           else ret (ss, Response__NotFound)
+      oo <- getx coid orders;;
+      if oo is Some (bid, ba, sid, sa)
+      then
+        ob <- getx bid accounts;;
+        os <- getx sid accounts;;
+        if (ob, os) is (Some (_, bt, _), Some (_, st, _))
+        then
+          '(s1, r1) <- withdraw uid bt ba ss;;
+          if r1 is Response__Account _
+          then
+            '(s2, r2) <- credit bid ba s1;;
+            if r2 is Response__Account _
+            then
+              '(s3, r3) <- deposit uid st sa s2;;
+              ret (if r3 is Response__Account _ then s3 else ss, r3)
+            else ret (ss, r2)
+          else ret (ss, r1)
+        else ret (ss, Response__NotFound)
       else ret (ss, Response__NotFound)
     end.
 

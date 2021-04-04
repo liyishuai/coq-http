@@ -110,7 +110,7 @@ Definition encode_request (req : swap_request id) : http_request id :=
 
 Definition account_id := N.
 Definition accountT exp_ : Type :=
-  exp_ account_id * (user_id * assetT * exp_ amountT).
+  exp_ account_id * (user_id * assetT * amountT).
 Definition orderT exp_ : Type :=
   exp_ order_id * (exp_ account_id * amountT * exp_ account_id * amountT).
 
@@ -123,20 +123,33 @@ Variant swap_response {exp_} :=
 | Response__Order       (o : orderT exp_).
 Arguments swap_response : clear implicits.
 
-Definition getAccount (j : json) : option (accountT id) :=
+Instance Serialize__Response {exp_} `{Serialize (exp_ N)}
+  : Serialize (swap_response exp_) :=
+  fun r =>
+    match r with
+    | Response__InsufficientFund => [Atom 402; Atom "Payment Required"]
+    | Response__NotFound         => [Atom 404; Atom "Not Found"]
+    | Response__ListAccount x | Response__ListOrders x
+    | Response__Account     x | Response__Order      x => [Atom 200; to_sexp x]
+    end%sexp.
+
+Definition getAccount_ (j : json) :=
   aid <- (get_N "ID"     j : option (id N));;
-  amt <- (get_N "Amount" j : option (id N));;
+  amt <-  get_N "Amount" j;;
   uid <-  get_N "UserID" j;;
   tcr <-  get_string "AssetTicker" j;;
   Some (aid, (uid, tcr, amt)).
 
-Definition getOrder (j : json) : option (orderT id) :=
+Definition getOrder_ (j : json) :=
   oid <- (get_N "ID"         j : option (id N));;
   bid <- (get_N "BuyerID"    j : option (id N));;
   sid <- (get_N "SellerID"   j : option (id N));;
   bam <-  get_N "BuyAmount"  j;;
   sam <-  get_N "SellAmount" j;;
   Some (oid, (bid, bam, sid, sam)).
+
+Definition getAccount : json -> option (accountT id) := getAccount_.
+Definition getOrder   : json -> option (orderT   id) := getOrder_. (* wat *)
 
 Instance Exception__option : MonadExc unit option := {|
   raise _ _   := None;

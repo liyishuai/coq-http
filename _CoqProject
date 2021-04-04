@@ -21,3 +21,4 @@ app/AppMessage.v
 app/Semantics.v
 app/Tcp.v
 app/Observe.v
+app/Solver.v

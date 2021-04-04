@@ -8,17 +8,16 @@ Variant observeE {q r s} : Type -> Type :=
 | Observe__FromServer :   observeE (packetT q r).
 Arguments observeE : clear implicits.
 
-Variant unifyE {r : (Set -> Type) -> Type} : Type -> Type :=
-  Unify__Fresh  : unifyE (exp N)
-| Unify__Decide : exp bool -> unifyE bool
-| Unify__Match  : r exp -> r id -> unifyE unit.
+Variant unifyE {r : (Set -> Type) -> _} : Type -> Type :=
+  Unify__Fresh : unifyE (exp N)
+| Unify__Eval  : exp nat -> unifyE nat
+| Unify__Match : r exp -> r id -> unifyE unit.
 Arguments unifyE : clear implicits.
+Arguments unifyE _%type_scope.
 
 Class Is__oE q r s E `{unifyE r -< E} `{failureE -< E} `{decideE -< E}
       `{observeE q (r id) s -< E}.
-Notation oE q r s :=
-  (let r' : (Set -> Type) -> Type := r in (* wat *)
-   unifyE r' +' failureE +' decideE +' observeE q (r' id) s).
+Notation oE q r s := (unifyE r +' failureE +' decideE +' observeE q (r id) s).
 Instance oE_Is__oE q r s : Is__oE q r s (oE q r s). Defined.
 
 Open Scope string_scope.
@@ -41,8 +40,8 @@ Definition dualize {q r s T E} `{Is__oE q r s E}
              ++ " but observed " ++ to_string (s,  d)
   end.
 
-Definition observer {q r s E R} `{Is__oE q r s E}
-           (m : itree (nE q (r exp) s symE) R) : itree E R :=
+Definition observer {q r s E} `{Is__oE q r s E}
+           (m : itree (nE q (r exp) s symE) void) : itree E void :=
   interp (fun _ e =>
             match e with
             | (e|) => dualize e
@@ -51,8 +50,8 @@ Definition observer {q r s E R} `{Is__oE q r s E}
                        end
             | (||se) =>
               match se in symE Y return _ Y with
-              | Sym__Fresh     => trigger Unify__Fresh
-              | Sym__Decide bx => embed   Unify__Decide bx
+              | Sym__Fresh   => trigger Unify__Fresh
+              | Sym__Eval nx => embed   Unify__Eval nx
               end
             end) m.
 
