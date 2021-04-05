@@ -1,4 +1,4 @@
-From HTTP Require Import
+From HTTP Require Export
      Tester.
 From App Require Export
      Observe.
@@ -106,4 +106,11 @@ Definition solver {E F} `{failureE -< E} `{F -< E}
            (m : itree (unifyE swap_response +' F) void) : itree E void :=
   snd <$> solver' m [].
 
-Definition solve_swap := solver ∘ observe_swap.
+Class Is__stE q r s E `{failureE -< E} `{decideE -< E} `{observeE q r s -< E}.
+Notation stE q r s := (failureE +' decideE +' observeE q r s).
+Instance stE_Is__stE q r s : Is__stE q r s (stE q r s). Defined.
+
+Definition solve_swap {E}
+           `{Is__stE (swap_request id) (swap_response id) (swap_state exp) E}
+           : swap_state exp -> itree E void
+  := solver ∘ observe_swap.
