@@ -11,7 +11,7 @@ Open Scope string_scope.
 Instance Serialize__field {exp_} `{Serialize (exp_ field_value)}
   : Serialize (field_line exp_) :=
   fun f => let 'Field n v := f in
-        [to_sexp n; to_sexp v]%sexp.
+        [Atom n; to_sexp v]%sexp.
 
 Definition exp_state : Set := N * list (var * option message_body) *
                               list (var * (field_value + list field_value)).

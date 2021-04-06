@@ -54,8 +54,7 @@ Definition eval_nth (n : N) (l : list (exp N)) (s : solver_state) : nat :=
   let l' : list (option N) := map (get_value s) l in
   find_nth (fun on => on = Some n?) l'.
 
-Instance Serialize__idVar : Serialize (id var) :=
-  fun (a : var) => to_sexp a.
+Instance Serialize__idVar : Serialize (id var) := Atom.
 
 Instance Serialize__IdResponse : Serialize (swap_response id) :=
   Serialize__Response.

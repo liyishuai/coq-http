@@ -63,10 +63,10 @@ Fixpoint unwrap {T} (e : exp T) : T :=
 
 Fixpoint exp_to_sexp {T} (e : exp T) : sexp :=
     match e with
-    | Exp__Const s    => [Atom "Constant string"; to_sexp s]
+    | Exp__Const s    => [Atom "Constant string"; Atom s]
     | Exp__Body  v    => [Atom "Message body"   ; to_sexp v]
     | Exp__ETag  v    => [Atom "Entity tag"     ; to_sexp v]
-    | Exp__Match f fx w => [Atom "Match tag"; to_sexp f; exp_to_sexp fx; to_sexp w]
+    | Exp__Match f fx w => [Atom "Match tag"; Atom f; exp_to_sexp fx; to_sexp w]
     end%sexp.
 
 Instance Serialize__exp {T} : Serialize (exp T) :=

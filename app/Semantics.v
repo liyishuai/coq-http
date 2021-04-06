@@ -17,8 +17,8 @@ Inductive exp : Type -> Type :=
 
 Fixpoint exp_to_sexp {T} (e : exp T) : sexp :=
   match e with
-  | Exp__Var   x => [Atom "Variable"; to_sexp x]
-  | Exp__Const n => [Atom "Number"; to_sexp n]
+  | Exp__Var   x => [Atom "Variable"; Atom x]
+  | Exp__Const n => [Atom "Number"; Atom n]
   | Exp__Nth x l => [Atom "Nth"; exp_to_sexp x; List (map exp_to_sexp l)]
   end%sexp.
 

@@ -6,7 +6,7 @@ From IShrink Require Export
 Notation clientE := (@clientE (packetT (swap_request id) (swap_response id))
                               (swap_state exp)).
 
-Notation tE := (failureE +' nondetE +' clientE).
+Notation tE := (failureE +' clientE +' nondetE).
 
 Notation swap_stE :=
   (stE (swap_request id) (swap_response id) (swap_state exp)).
