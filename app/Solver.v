@@ -3,30 +3,47 @@ From HTTP Require Export
 From App Require Export
      Observe.
 
-Definition solver_state := list (var * option N).
+Definition solver_state := list (var * (N + list N)).
 
-Definition unifyN (nx : exp N) (n : N) (s : solver_state)
+Definition assertN (nx : exp N) (n : N) (s : solver_state)
   : option solver_state :=
   match nx with
   | Exp__Var x =>
-    if get x s is Some (Some n0)
-    then if n0 =? n then Some s else None
-    else Some $ update x (Some n) s
+    match get x s with
+    | Some (inl n0) => if n0 =? n then Some s else None
+    | Some (inr ns) => if existsb (N.eqb n) ns
+                      then None
+                      else Some $ update x (inr (n::ns)) s
+    | None => Some $ put x (inl n) s
+    end
   | Exp__Const n0 => if n0 =? n then Some s else None
   | Exp__Nth _ _  => None
+  end.
+
+Definition assertNotN (nx : exp N) (n : N) (s : solver_state)
+  : option solver_state :=
+  match nx with
+  | Exp__Var x =>
+    match get x s with
+    | Some (inl n0) => if n0 =? n then None else Some s
+    | Some (inr ns) => Some $ update x (inr (n::ns)) s
+    | None => Some $ put x (inr [n]) s
+    end
+  | Exp__Const n0 => if n0 =? n then None else Some s
+  | Exp__Nth _ _ => None
   end.
 
 Definition unifyOrder (s : solver_state) (ox : orderT exp) (o : orderT id)
   : option solver_state :=
   let '((oidx, (bix, bax, six, sax)), (oid, (bi, ba, si, sa))) := (ox, o) in
   if (bax, sax) = (ba, sa)?
-  then unifyN oidx oid s >>= unifyN bix bi >>= unifyN six si
+  then assertN oidx oid s >>= assertN bix bi >>= assertN six si
   else None.
 
 Definition unifyAccount (s : solver_state) (ax : accountT exp) (a : accountT id)
   : option solver_state :=
   let '((aidx, vx), (aid, v)) := (ax, a) in
-  if vx = v? then unifyN aidx aid s else None.
+  if vx = v? then assertN aidx aid s else None.
 
 Definition unifyList {A : (Type -> Type) -> Type}
            (unifier : solver_state -> A exp -> A id -> option solver_state)
@@ -37,40 +54,38 @@ Definition unifyList {A : (Type -> Type) -> Type}
                  (zip lx l) (pure s)
   else None.
 
-Definition get_value (s : solver_state) (x : exp N) : option N :=
-  match x with
-  | Exp__Var   x => join $ get x s
-  | Exp__Const n => Some n
-  | Exp__Nth _ _ => None
-  end.
-
-Fixpoint find_nth {A} (f : A -> bool) (l : list A) : nat :=
-  match l with
-  | [] => O
-  | a :: l' => if f a then O else S (find_nth f l')
-  end.
-
-Definition eval_nth (n : N) (l : list (exp N)) (s : solver_state) : nat :=
-  let l' : list (option N) := map (get_value s) l in
-  find_nth (fun on => on = Some n?) l'.
+Fixpoint eval_nth {E} `{decideE -< E} `{failureE -< E}
+           (n : N) (l : list (exp N))
+  : Monads.stateT solver_state (itree E) nat :=
+  fun s =>
+    let assertSome (ost : option solver_state) : itree E solver_state :=
+        if ost is Some st then ret st else throw "Unsatisfiable" in
+    match l with
+    | [] => ret (s, O)
+    | x::l' => b <- trigger Decide;;
+             if b : bool
+             then s1 <- assertSome (assertN    x n s);; ret (s1, O)
+             else s1 <- assertSome (assertNotN x n s);;
+                  '(s2, n') <- eval_nth n l' s1;;
+                  ret (s2, S n')
+    end.
 
 Instance Serialize__idVar : Serialize (id var) := Atom.
 
 Instance Serialize__IdResponse : Serialize (swap_response id) :=
   Serialize__Response.
 
-Definition instantiate_unify {E A} `{failureE -< E} (e : unifyE swap_response A)
+Definition instantiate_unify {E A} `{failureE -< E} `{decideE -< E}
+           (e : unifyE swap_response A)
   : Monads.stateT solver_state (itree E) A :=
   fun s : solver_state =>
     match e with
     | Unify__Fresh =>
       let x : var := fresh_var s in
-      ret (put x None s, Exp__Var x)
+      ret (put x (inr []) s, Exp__Var x)
     | Unify__Eval v =>
-      if v is Exp__Nth x l
-      then if get_value s x is Some n
-           then ret (s, eval_nth n l s)
-           else ret (s, length l)
+      if v is Exp__Nth (Exp__Const n) l
+      then eval_nth n l s
       else throw "Should not happen"
     | Unify__Match rx r =>
       let mismatch := throw $ "Expect " ++ to_string rx
@@ -91,7 +106,7 @@ Definition instantiate_unify {E A} `{failureE -< E} (e : unifyE swap_response A)
       end
     end.
 
-Definition solver' {E F} `{failureE -< E} `{F -< E}
+Definition solver' {E F} `{failureE -< E} `{decideE -< E} `{F -< E}
            (m : itree (unifyE swap_response +' F) void)
   : Monads.stateT solver_state (itree E) void :=
   interp
@@ -101,7 +116,7 @@ Definition solver' {E F} `{failureE -< E} `{F -< E}
        | (|ee)  => liftState (F:=itree _) (trigger ee)
        end) m.
 
-Definition solver {E F} `{failureE -< E} `{F -< E}
+Definition solver {E F} `{failureE -< E} `{decideE -< E} `{F -< E}
            (m : itree (unifyE swap_response +' F) void) : itree E void :=
   snd <$> solver' m [].
 
