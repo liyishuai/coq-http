@@ -14,6 +14,22 @@ Record packetT {requestT responseT} :=
 Arguments packetT : clear implicits.
 Arguments Packet {_ _}.
 
+Instance Serialize__idVar : Serialize (id var) := Atom.
+
+Instance Serialize__idRequest : Serialize (swap_request id) :=
+  Serialize__request.
+
+Instance Serialize__idResponse : Serialize (swap_response id) :=
+  Serialize__response.
+
+Instance Serialize__packetT
+  : Serialize (packetT (swap_request id) (swap_response id)) :=
+  fun pkt =>
+    let 'Packet s d p := pkt in
+    [[Atom "Src"; to_sexp s];
+    [Atom "Dst"; to_sexp d];
+    [Atom "Msg"; to_sexp p]]%sexp.
+
 Variant switchE {requestT responseT} : Type -> Type :=
   Switch__In  : switchE (packetT requestT responseT)
 | Switch__Out : packetT requestT responseT -> switchE unit.

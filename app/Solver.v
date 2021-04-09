@@ -70,11 +70,6 @@ Fixpoint eval_nth {E} `{decideE -< E} `{failureE -< E}
                   ret (s2, S n')
     end.
 
-Instance Serialize__idVar : Serialize (id var) := Atom.
-
-Instance Serialize__IdResponse : Serialize (swap_response id) :=
-  Serialize__Response.
-
 Definition instantiate_unify {E A} `{failureE -< E} `{decideE -< E}
            (e : unifyE swap_response A)
   : Monads.stateT solver_state (itree E) A :=

@@ -71,7 +71,9 @@ Notation traceT  := (@traceT packetT).
 Parameter instantiate_request : traceT -> symreqT -> requestT.
 Parameter gen_request : gen_state -> traceT -> IO symreqT.
 
-Parameter tester : itree tE void.
+Parameter tester_state : Type.
+Parameter tester_init  : IO tester_state.
+Parameter tester : tester_state -> itree tE void.
 
 End IShrinkSIG.
 
@@ -176,9 +178,10 @@ Fixpoint execute' {R} (fuel : nat) (s : conn_state)
     end
   end.
 
-Definition execute {R} (m : itree tE R) (oscript : option scriptT)
+Definition execute {R} (m : tester_state -> itree tE R) (oscript : option scriptT)
   : IO (bool * (scriptT * traceT)) :=
-  '(b, s, t') <- execute' 5000 init_state oscript ([], []) m;;
+  tester_init_state <- tester_init;;
+  '(b, s, t') <- execute' 5000 init_state oscript ([], []) (m tester_init_state);;
   cleanup s;;
   ret (b, t').
 

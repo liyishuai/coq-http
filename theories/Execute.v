@@ -153,9 +153,12 @@ Definition http_tester {E} `{Is__tE E} : itree E void :=
 
 Instance Shrink__request : Shrink (http_request texp) := { shrink _ := [] }.
 
+Definition or_handler : nondetE ~> IO :=
+  fun _ e => let 'Or := e in ORandom.bool tt.
+
 Definition other_handler : nondetE +' logE ~> IO :=
   fun _ e => match e with
-          | (ne|) => let 'Or := ne in ORandom.bool tt
+          | (ne|) => or_handler _ ne
           | (|le) => let 'Log str := le in
                     prerr_endline str
           end.
@@ -163,6 +166,9 @@ Definition other_handler : nondetE +' logE ~> IO :=
 Definition cleanup (s : conn_state) : IO unit :=
   fold_left (fun m fd => OUnix.close fd;; m)
             (map (fst ∘ snd) s) (ret tt).
+
+Definition recv_http_response : Monads.stateT conn_state IO (option (packetT id)) :=
+  recv_bytes;; findResponse.
 
 Module HttpTypes : IShrinkSIG.
 
@@ -193,11 +199,13 @@ Definition other_handler       := other_handler.
 
 Definition conn_state          := conn_state.
 Definition init_state          := [] : conn_state.
-Definition recv_response       := recv_bytes;; findResponse.
+Definition recv_response       := recv_http_response.
 Definition send_request        := send_request.
 Definition cleanup             := cleanup.
 
-Definition tester              := http_tester.
+Definition tester_state        := unit.
+Definition tester_init         := ret tt : IO tester_state.
+Definition tester              := fun (_ : unit) => http_tester.
 
 End HttpTypes.
 

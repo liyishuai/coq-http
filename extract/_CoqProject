@@ -1,6 +1,8 @@
 -Q ../theories HTTP
 -Q ../ishrink IShrink
+-Q ../app App
 -Q . Extract
 
 IO_Test.v
+TestSwap.v
 TestHttp.v

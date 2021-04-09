@@ -77,3 +77,5 @@ CoFixpoint tester' (others : list (itree swap_stE void))
   end.
 
 Definition tester : itree swap_stE void -> itree tE void := tester' [].
+
+Definition swap_tester : swap_state exp -> itree tE void := tester ∘ solve_swap.

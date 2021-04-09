@@ -1,4 +1,4 @@
-From HTTP Require Import
+From HTTP Require Export
      Execute.
 From App Require Import
      Tester.
@@ -16,19 +16,6 @@ Instance Serialize__texp : Serialize (texp N) :=
          | Texp__Account  x n => [Atom "Account"; Atom x; Atom n]
          | Texp__Amount x n p => [Atom "Amount" ; Atom x; Atom n; Atom p]
          end%sexp.
-
-Instance Serialize__request {exp_} `{Serialize (exp_ N)}
-  : Serialize (swap_request exp_) :=
-  fun req => match req with
-          | Request__ListOrders        =>  Atom "listOrders"
-          | Request__ListAccount uid   => [Atom "listAccount"; Atom uid]
-          | Request__TakeOrder uid oid => [Atom "takeOrder"; Atom uid; to_sexp oid]
-          | Request__MakeOrder uid bt ba st sa =>
-            [Atom "makeOrder"; Atom uid; Atom bt; Atom ba; Atom st; to_sexp sa]
-          | Request__Deposit uid t a => [Atom "deposit"; Atom uid; Atom t; Atom a]
-          | Request__Withdraw uid t a =>
-            [Atom "withdraw"; Atom uid; Atom t; to_sexp a]
-          end%sexp.
 
 Instance Serialize__symreq : Serialize (swap_request texp) := Serialize__request.
 
@@ -123,7 +110,9 @@ Definition instantiate_request (tr : traceT) (rx : swap_request texp)
     Request__Withdraw    uid t        $ instantiate_exp tr ax
   end.
 
-Definition randomN : N -> IO N := fmap n_of_int ∘ ORandom.int ∘ int_of_n.
+Definition randomN : N -> IO N := fmap n_of_int ∘ ORandom.int.
+
+Definition users : list user_id := [1;2;3;4].
 
 Definition gen_request (ss : swap_state exp) (tr : traceT)
   : IO (swap_request texp) :=
@@ -151,7 +140,7 @@ Definition gen_request (ss : swap_state exp) (tr : traceT)
       end in
   let genAmount : IO amountT :=
       io_choose_ (ret 100) (map (snd ∘ snd) accounts) in
-  uid <- io_choose [0;1;2;3;4];;
+  uid <- io_choose (0::users);;
   lox <- map_if id <$> sequence (map getOrder tr);;
   oid <- io_choose_ (Texp__Const <$> genOrder) lox;;
   bt <- io_choose ["CNY";"USD";"JPY";"EUR";"ETH"];;
@@ -166,3 +155,101 @@ Definition gen_request (ss : swap_state exp) (tr : traceT)
      Request__MakeOrder   uid bt ba st ax;
      Request__Deposit     uid bt ba;
      Request__Withdraw    uid st ax].
+
+Definition send_request : swap_request id ->
+                          Monads.stateT conn_state IO (option connT) :=
+  send_request ∘ encode_request.
+
+Definition recv_response : Monads.stateT conn_state IO (option packetT) :=
+  op <- recv_http_response;;
+  if op is Some (HTTP.Tcp.Packet s d (inr res))
+  then ret (decode_response res >>= Some ∘ Packet s d ∘ inr)
+  else ret None.
+
+Definition wrap_order (o : orderT id) : orderT exp :=
+  let '(oid, (b, ba, s, sa)) := o in
+  (Exp__Const oid, (Exp__Const b, ba, Exp__Const s, sa)).
+
+Definition wrap_account (a : accountT id) : accountT exp :=
+  let '(aid, av) := a in
+  (Exp__Const aid, av).
+
+Definition tester_init : IO (swap_state exp) :=
+  s1 <- IO.fix_io
+         (fun send_rec s =>
+            '(s1, oc) <- send_request Request__ListOrders s;;
+            if oc is Some _
+            then ret s1
+            else send_rec s1) [];;
+  '(s2, orders) <- IO.fix_io
+                    (fun recv_rec s =>
+                       '(s2, op) <- recv_response s;;
+                       if packet__payload <$> op is
+                                        Some (inr (Response__ListOrders os))
+                       then ret (s2, map wrap_order os)
+                       else recv_rec s2) s1;;
+  '(_, accounts) <-
+  fold_left
+    (fun sl uid =>
+       '(s, la0) <- sl;;
+       '(s', la1) <-
+       IO.fix_io
+         (fun send_rec s0 =>
+            '(s1, oc) <- send_request (Request__ListAccount uid) s0;;
+            if oc is Some _
+            then
+              IO.fix_io
+                (fun recv_rec s1 =>
+                   '(s2, op) <- recv_response s1;;
+                   if packet__payload <$> op is
+                                    Some (inr (Response__ListAccount la))
+                   then ret (s2, map wrap_account la)
+                   else recv_rec s2) s1
+            else send_rec s1) s;;
+       ret (s', la1 ++ la0)) users (ret (s2, []));;
+  ret (accounts, orders).
+
+Module SwapTypes : IShrinkSIG.
+
+Definition requestT := swap_request id.
+Definition responseT := swap_response id.
+
+Definition connT := connT.
+Definition Conn__Server := Conn__Server.
+Definition Serialize__connT := Serialize__connT.
+Definition Dec_Eq__connT := Dec_Eq__connT.
+
+Definition packetT := packetT.
+Definition Packet := @Packet requestT responseT.
+Definition packet__payload := @packet__payload requestT responseT.
+Definition packet__src := @packet__src requestT responseT.
+Definition packet__dst := @packet__dst requestT responseT.
+Definition Serialize__packetT := Serialize__packetT.
+
+Definition gen_state := swap_state exp.
+
+Definition otherE := nondetE.
+Definition other_handler := or_handler.
+
+Definition conn_state := conn_state.
+Definition init_state := [] : conn_state.
+Definition recv_response := recv_response.
+Definition send_request := send_request.
+Definition cleanup := cleanup.
+
+Definition symreqT := swap_request texp.
+Definition Shrink__symreqT := Shrink__request.
+Definition Serialize__symreqT := Serialize__request : Serialize symreqT.
+
+Definition instantiate_request := instantiate_request.
+Definition gen_request := gen_request.
+
+Definition tester_state := swap_state exp.
+Definition tester_init := tester_init.
+Definition tester := swap_tester.
+
+End SwapTypes.
+
+Module TestSwap := IShrink SwapTypes.
+
+Definition test_swap : IO bool := TestSwap.test.

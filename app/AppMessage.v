@@ -108,6 +108,19 @@ Definition encode_request (req : swap_request id) : http_request id :=
   in
   Request line headers obody.
 
+Instance Serialize__request {exp_} `{Serialize (exp_ N)}
+  : Serialize (swap_request exp_) :=
+  fun req => match req with
+          | Request__ListOrders        =>  Atom "listOrders"
+          | Request__ListAccount uid   => [Atom "listAccount"; Atom uid]
+          | Request__TakeOrder uid oid => [Atom "takeOrder"; Atom uid; to_sexp oid]
+          | Request__MakeOrder uid bt ba st sa =>
+            [Atom "makeOrder"; Atom uid; Atom bt; Atom ba; Atom st; to_sexp sa]
+          | Request__Deposit uid t a => [Atom "deposit"; Atom uid; Atom t; Atom a]
+          | Request__Withdraw uid t a =>
+            [Atom "withdraw"; Atom uid; Atom t; to_sexp a]
+          end%sexp.
+
 Definition account_id := N.
 Definition accountT exp_ : Type :=
   exp_ account_id * (user_id * assetT * amountT).
@@ -123,7 +136,7 @@ Variant swap_response {exp_} :=
 | Response__Order       (o : orderT exp_).
 Arguments swap_response : clear implicits.
 
-Instance Serialize__Response {exp_} `{Serialize (exp_ N)}
+Instance Serialize__response {exp_} `{Serialize (exp_ N)}
   : Serialize (swap_response exp_) :=
   fun r =>
     match r with

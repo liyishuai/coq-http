@@ -45,7 +45,7 @@ Definition conn_of_fd (fd : file_descr)
 
 Definition create_conn (s : conn_state)
   : IO (conn_state * option (file_descr * clientT)) :=
-  let iaddr : inet_addr := inet_addr_loopback in
+  iaddr <- inet_addr_of_string "gswap.herokuapp.com";;
   ofd <- try (fd <- socket PF_INET SOCK_STREAM int_zero;;
              connect fd (ADDR_INET iaddr server_port);;
              ret fd) (ret tt);;
