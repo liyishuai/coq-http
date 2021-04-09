@@ -188,7 +188,7 @@ Definition tester_init : IO (swap_state exp) :=
                                         Some (inr (Response__ListOrders os))
                        then ret (s2, map wrap_order os)
                        else recv_rec s2) s1;;
-  '(_, accounts) <-
+  '(s3, accounts) <-
   fold_left
     (fun sl uid =>
        '(s, la0) <- sl;;
@@ -207,6 +207,7 @@ Definition tester_init : IO (swap_state exp) :=
                    else recv_rec s2) s1
             else send_rec s1) s;;
        ret (s', la1 ++ la0)) users (ret (s2, []));;
+  cleanup s3;;
   ret (accounts, orders).
 
 Module SwapTypes : IShrinkSIG.
