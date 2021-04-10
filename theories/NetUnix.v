@@ -45,16 +45,19 @@ Definition conn_of_fd (fd : file_descr)
 
 Definition create_conn (s : conn_state)
   : IO (conn_state * option (file_descr * clientT)) :=
-  iaddr <- inet_addr_of_string "gswap.herokuapp.com";;
-  ofd <- try (fd <- socket PF_INET SOCK_STREAM int_zero;;
-             connect fd (ADDR_INET iaddr server_port);;
-             ret fd) (ret tt);;
-  match ofd with
-  | Some fd =>
-    let c := length s in
-    ret ((c, (fd, ""))::s, Some (fd, c))
-  | None => ret (s, None)
-  end.
+  addrs <- getaddrinfo "gswap.herokuapp.com" "http" [];;
+  if addrs is Mk_addr_info _ _ _ addr name::_
+  then
+    ofd <- try (fd <- socket PF_INET SOCK_STREAM int_zero;;
+               connect fd addr;;
+               ret fd) (ret tt);;
+    match ofd with
+    | Some fd =>
+      let c := length s in
+      ret ((c, (fd, ""))::s, Some (fd, c))
+    | None => ret (s, None)
+    end
+  else ret (s, None).
 
 Notation BUFFER_SIZE := 1024.
 Definition SELECT_TIMEOUT := OFloat.Unsafe.of_string "0".

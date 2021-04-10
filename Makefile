@@ -2,9 +2,11 @@ COQMAKEFILE?=Makefile.coq
 EXE?=TestHttp.native
 INSTALLDIR?=$(shell opam var bin)
 
-all: $(COQMAKEFILE)
-	@+$(MAKE) -f $^ $@
+all: coq
 	$(MAKE) -C extract
+
+coq: $(COQMAKEFILE)
+	@+$(MAKE) -f $^
 
 test: all
 	$(MAKE) -C $@

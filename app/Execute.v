@@ -210,44 +210,47 @@ Definition tester_init : IO (swap_state exp) :=
   cleanup s3;;
   ret (accounts, orders).
 
+Definition MyType := Type.
+Definition nondetE' : Type -> MyType := nondetE.
+
 Module SwapTypes : IShrinkSIG.
 
-Definition requestT := swap_request id.
-Definition responseT := swap_response id.
+Definition requestT            := swap_request id.
+Definition responseT           := swap_response id.
 
-Definition connT := connT.
-Definition Conn__Server := Conn__Server.
-Definition Serialize__connT := Serialize__connT.
-Definition Dec_Eq__connT := Dec_Eq__connT.
+Definition connT               := connT.
+Definition Conn__Server          := Conn__Server.
+Definition Serialize__connT      := Serialize__connT.
+Definition Dec_Eq__connT         := Dec_Eq__connT.
 
-Definition packetT := packetT.
-Definition Packet := @Packet requestT responseT.
-Definition packet__payload := @packet__payload requestT responseT.
-Definition packet__src := @packet__src requestT responseT.
-Definition packet__dst := @packet__dst requestT responseT.
-Definition Serialize__packetT := Serialize__packetT.
+Definition packetT             := packetT.
+Definition Packet              := @Packet requestT responseT.
+Definition packet__payload       := @packet__payload requestT responseT.
+Definition packet__src           := @packet__src requestT responseT.
+Definition packet__dst           := @packet__dst requestT responseT.
+Definition Serialize__packetT    := Serialize__packetT.
 
-Definition gen_state := swap_state exp.
+Definition gen_state           := swap_state exp.
 
-Definition otherE := nondetE.
-Definition other_handler := or_handler.
+Definition otherE              := nondetE'.
+Definition other_handler       := or_handler.
 
-Definition conn_state := conn_state.
-Definition init_state := [] : conn_state.
-Definition recv_response := recv_response.
-Definition send_request := send_request.
-Definition cleanup := cleanup.
+Definition conn_state          := conn_state.
+Definition init_state          := [] : conn_state.
+Definition recv_response       := recv_response.
+Definition send_request        := send_request.
+Definition cleanup             := cleanup.
 
-Definition symreqT := swap_request texp.
-Definition Shrink__symreqT := Shrink__request.
-Definition Serialize__symreqT := Serialize__request : Serialize symreqT.
+Definition symreqT             := swap_request texp.
+Definition Shrink__symreqT       := Shrink__request.
+Definition Serialize__symreqT    := Serialize__request : Serialize symreqT.
 
 Definition instantiate_request := instantiate_request.
-Definition gen_request := gen_request.
+Definition gen_request         := gen_request.
 
-Definition tester_state := swap_state exp.
-Definition tester_init := tester_init.
-Definition tester := swap_tester.
+Definition tester_state        := swap_state exp.
+Definition tester_init         := tester_init.
+Definition tester              := swap_tester.
 
 End SwapTypes.
 

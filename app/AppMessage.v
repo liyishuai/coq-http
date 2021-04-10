@@ -77,12 +77,12 @@ Definition swap_form (req : swap_request id) : form :=
 
 Definition swap_target (req : swap_request id) : request_target :=
   match req with
-  | Request__ListOrders          => RequestTarget__Origin "/listOrders" None
-  | Request__TakeOrder _ _       => RequestTarget__Origin "/takeOrder"  None
-  | Request__MakeOrder _ _ _ _ _ => RequestTarget__Origin "/makeOrder"  None
-  | Request__Deposit   _ _ _     => RequestTarget__Origin "/deposit"    None
-  | Request__Withdraw  _ _ _     => RequestTarget__Origin "/withdraw"   None
-  | Request__ListAccount _       => RequestTarget__Origin "/listAccount"
+  | Request__ListOrders          => RequestTarget__Origin "listOrders" None
+  | Request__TakeOrder _ _       => RequestTarget__Origin "takeOrder"  None
+  | Request__MakeOrder _ _ _ _ _ => RequestTarget__Origin "makeOrder"  None
+  | Request__Deposit   _ _ _     => RequestTarget__Origin "deposit"    None
+  | Request__Withdraw  _ _ _     => RequestTarget__Origin "withdraw"   None
+  | Request__ListAccount _       => RequestTarget__Origin "listAccount"
                              (Some (form_to_string (swap_form req)))
   end.
 
