@@ -237,7 +237,7 @@ Definition parseLastChunk : parser unit :=
   parseCRLF.
 
 Definition parseChunk : parser string :=
-  n <- N.to_nat <$> parseHex;;
+  n <- guard (negb ∘ Nat.eqb O) (N.to_nat <$> parseHex);;
   maybe parseChunkExt;;
   parseCRLF;;
   cs <- manyN n anyToken;;
@@ -245,11 +245,13 @@ Definition parseChunk : parser string :=
   ret (string_of_list_ascii cs).
 
 Definition parseChunkedBody : parser string :=
-  data <- concat "" <$> many parseChunk;;
-  parseLastChunk;;
-  parseFieldLines;;
-  parseCRLF;;
-  ret data.
+  catch
+    (data <- concat "" <$> many parseChunk;;
+     parseLastChunk;;
+     parseFieldLines;;
+     parseCRLF;;
+     ret data)
+    (fun e => parseChunk;; raise e).
 
 (** https://httpwg.org/http-core/draft-ietf-httpbis-messaging-latest.html#rfc.section.6 *)
 Definition findField {exp_} (n : field_name) (fs : list (field_line exp_))
@@ -262,7 +264,7 @@ Definition parseBody (fs : list (field_line id))
   match findField "Transfer-Encoding" fs with
   | Some te =>
     if fold (String ∘ tolower) "" (te : field_value) =? "chunked"
-    then Some <$> parseChunk
+    then Some <$> parseChunkedBody
     else raise $ Some $ "Unknown transfer encoding "
                ++ to_string (te : field_value)
   | None =>

@@ -15,6 +15,7 @@ From ExtLib Require Export
 From Coq Require Export
      Bool
      DecimalString
+     String
      NArith.
 Export
   IfNotations
@@ -166,7 +167,7 @@ Definition getOrder   : json -> option (orderT   id) := getOrder_. (* wat *)
 
 Instance Exception__option : MonadExc unit option := {|
   raise _ _   := None;
-  catch _ _ f := f tt |}.
+  catch _ oe f := if oe is Some e then Some e else f tt |}.
 
 Definition decode_response (res : http_response id)
   : option (swap_response id) :=

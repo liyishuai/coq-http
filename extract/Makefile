@@ -4,7 +4,8 @@ BINS?=TestSwap.native TestHttp.native
 
 all:
 	$(RM) $(BINS)
-	$(MAKE) $(BINS)
+	$(MAKE) TestSwap.native
+	$(MAKE) TestHttp.native
 
 $(COQMAKEFILE): _CoqProject
 	$(COQBIN)coq_makefile -f $^ -o $@

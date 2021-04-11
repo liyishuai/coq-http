@@ -17,8 +17,10 @@ Fixpoint findResponse (s : conn_state)
     | inl (Some err) =>
       failwith $ "Bad response " ++ to_string str ++ " received on connection "
                ++ to_string c ++ ", error message: " ++ err
-    | inl None => '(t', op) <- findResponse t;;
-                 ret (cfs :: t', op)
+    | inl None =>
+      (* prerr_endline ("Incomplete response: " ++ str);; *)
+      '(t', op) <- findResponse t;;
+      ret (cfs :: t', op)
     | inr (r, str') =>
       (* curr <- OFloat.to_string <$> OUnix.gettimeofday;; *)
       (* prerr_endline curr;; *)

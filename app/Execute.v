@@ -143,9 +143,9 @@ Definition gen_request (ss : swap_state exp) (tr : traceT)
   uid <- io_choose (0::users);;
   lox <- map_if id <$> sequence (map getOrder tr);;
   oid <- io_choose_ (Texp__Const <$> genOrder) lox;;
-  bt <- io_choose ["CNY";"USD";"JPY";"EUR";"ETH"];;
+  bt <- io_choose ["CNY";"USD";"JPY";"EUR"];;
   ba <- randomN 1000;;
-  st <- io_choose ["CNY";"USD";"JPY";"EUR";"ETH"];;
+  st <- io_choose ["CNY";"USD";"JPY";"EUR"];;
   ams <- map_if id <$> sequence (map getAmount tr);;
   ax <- io_choose_ (Texp__Const <$> genAmount) ams;;
   io_choose
@@ -163,7 +163,14 @@ Definition send_request : swap_request id ->
 Definition recv_response : Monads.stateT conn_state IO (option packetT) :=
   op <- recv_http_response;;
   if op is Some (HTTP.Tcp.Packet s d (inr res))
-  then ret (decode_response res >>= Some ∘ Packet s d ∘ inr)
+  then
+    (* if decode_response res is Some sres *)
+    (* then liftState (prerr_endline (to_string sres));; *)
+    (*      ret (Some (Packet s d (inr sres))) *)
+    (* else *)
+    (*   liftState (prerr_endline "Invalid response");; *)
+    (*   ret None *)
+    ret (decode_response res >>= Some ∘ Packet s d ∘ inr)
   else ret None.
 
 Definition wrap_order (o : orderT id) : orderT exp :=
@@ -184,10 +191,13 @@ Definition tester_init : IO (swap_state exp) :=
   '(s2, orders) <- IO.fix_io
                     (fun recv_rec s =>
                        '(s2, op) <- recv_response s;;
-                       if packet__payload <$> op is
-                                        Some (inr (Response__ListOrders os))
-                       then ret (s2, map wrap_order os)
-                       else recv_rec s2) s1;;
+                       match packet__payload <$> op with
+                       | Some (inr (Response__ListOrders os)) =>
+                         ret (s2, map wrap_order os)
+                       | Some (inr (Response__ListAccount [])) =>
+                         ret (s2, [])
+                       | _ => recv_rec s2
+                       end) s1;;
   '(s3, accounts) <-
   fold_left
     (fun sl uid =>
@@ -201,8 +211,7 @@ Definition tester_init : IO (swap_state exp) :=
               IO.fix_io
                 (fun recv_rec s1 =>
                    '(s2, op) <- recv_response s1;;
-                   if packet__payload <$> op is
-                                    Some (inr (Response__ListAccount la))
+                   if packet__payload <$> op is Some (inr (Response__ListAccount la))
                    then ret (s2, map wrap_account la)
                    else recv_rec s2) s1
             else send_rec s1) s;;
