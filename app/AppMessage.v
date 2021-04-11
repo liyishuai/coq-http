@@ -101,7 +101,7 @@ Definition encode_request (req : swap_request id) : http_request id :=
   let line   : request_line   := RequestLine method target (Version 1 1) in
   let obody  : option message_body := swap_body req in
   let headers : list (field_line id) :=
-      Field "Host" "gswap.herokuapp.com"::
+      Field "Host" "localhost:5000"::
             if obody is Some body
             then [Field "Content-Length" (string_of_nat (length body));
                   Field "Content-Type" "application/x-www-form-urlencoded"]

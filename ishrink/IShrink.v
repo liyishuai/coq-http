@@ -128,7 +128,9 @@ Fixpoint execute' {R} (fuel : nat) (s : conn_state)
     | TauF m' => execute' fuel s oscript acc m'
     | VisF e k =>
       match e with
-      | (Throw err|) => ret (false, s, acc)
+      | (Throw err|) =>
+        prerr_endline err;;
+        ret (false, s, acc)
       | (|ce|) =>
         match ce in clientE Y return (Y -> _) -> _ with
         | Client__Recv =>
