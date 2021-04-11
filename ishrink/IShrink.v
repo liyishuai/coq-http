@@ -88,7 +88,7 @@ Fixpoint repeat_list {A} (n : nat) (l : list A) : list A :=
 
 Definition shrink_execute' (exec : scriptT -> IO (bool * traceT))
            (init : scriptT) : IO (option scriptT) :=
-  prerr_endline "<<<<< initial script >>>>>";;
+  prerr_endline "===== initial script =====";;
   prerr_endline (to_string init);;
   IO.fix_io
     (fun shrink_rec ss =>
@@ -110,10 +110,12 @@ Definition shrink_execute' (exec : scriptT -> IO (bool * traceT))
 
 Definition shrink_execute (first_exec : IO (bool * (scriptT * traceT)))
            (then_exec : scriptT -> IO (bool * traceT)) : IO bool :=
-  '(b, (sc, _)) <- first_exec;;
+  '(b, (sc, tr)) <- first_exec;;
   if b : bool
   then ret true
-  else IO.while_loop (shrink_execute' then_exec) sc;;
+  else prerr_endline "<<<<< rejecting trace >>>>>";;
+       prerr_endline (to_string tr);;
+       IO.while_loop (shrink_execute' then_exec) sc;;
        ret false.
 
 Fixpoint execute' {R} (fuel : nat) (s : conn_state)

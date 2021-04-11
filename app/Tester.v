@@ -63,7 +63,9 @@ CoFixpoint tester' (others : list (itree swap_stE void))
                if op is Some p
                then Tau (tester' (match_observe (Observe__ToServer st) p others)
                                  (k p))
-               else catch "Not ready to send"
+               else if others is other::others'
+                    then Tau (tester' (others' ++ [m]) other)
+                    else Tau (tester' [] m)
       | Observe__FromServer =>
         fun k =>
           op <- trigger Client__Recv;;

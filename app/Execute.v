@@ -131,7 +131,7 @@ Definition gen_request (ss : swap_state exp) (tr : traceT)
       io_choose_ (ret 0) (map_if getOid orders) in
   let getAmount (lp : labelT * packetT) : IO (option (texp amountT)) :=
       let '(l, Packet _ _ p) := lp in
-      pc <- randomN 8;;
+      pc <- randomN 6;;
       match p with
       | inr (Response__Account _) => ret $ Some (Texp__Amount l O pc)
       | inr (Response__ListAccount ((_::_) as la)) =>
@@ -182,6 +182,7 @@ Definition wrap_account (a : accountT id) : accountT exp :=
   (Exp__Const aid, av).
 
 Definition tester_init : IO (swap_state exp) :=
+  OUnix.sleep 1;;
   s1 <- IO.fix_io
          (fun send_rec s =>
             '(s1, oc) <- send_request Request__ListOrders s;;
@@ -217,6 +218,10 @@ Definition tester_init : IO (swap_state exp) :=
             else send_rec s1) s;;
        ret (s', la1 ++ la0)) users (ret (s2, []));;
   cleanup s3;;
+  prerr_endline "<<<<< initial account >>>>>";;
+  prerr_endline (to_string accounts);;
+  prerr_endline "===== initial orders  =====";;
+  prerr_endline (to_string orders);;
   ret (accounts, orders).
 
 Definition MyType := Type.

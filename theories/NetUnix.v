@@ -57,7 +57,7 @@ Definition create_conn (s : conn_state)
   end.
 
 Notation BUFFER_SIZE := 2048.
-Definition SELECT_TIMEOUT := OFloat.Unsafe.of_string "0".
+Definition SELECT_TIMEOUT := OFloat.Unsafe.of_string "1e-3".
 
 Definition recv_bytes' : Monads.stateT conn_state IO bool :=
     (fun s =>
