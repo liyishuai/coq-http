@@ -93,9 +93,11 @@ Definition deposit {E} `{symE -< E}
            (uid : user_id) (ticker : assetT) (amount : amountT)
   : Monads.stateT (swap_state exp) (itree E) (swap_response exp) :=
   fun ss =>
-    let (accounts, orders) := ss in
-    '(s1, aid) <- locate uid ticker ss;;
-    credit aid amount s1.
+    if min (String.length ticker) $ N.to_nat $ N.min uid amount is O
+    then ret (ss, Response__BadRequest)
+    else let (accounts, orders) := ss in
+         '(s1, aid) <- locate uid ticker ss;;
+         credit aid amount s1.
 
 Definition debit {E} `{symE -< E} (aid : exp account_id) (amount : amountT)
   : Monads.stateT (swap_state exp) (itree E) (swap_response exp) :=
@@ -114,10 +116,12 @@ Definition withdraw {E} `{symE -< E}
            (uid : user_id) (ticker : assetT) (amount : amountT)
   : Monads.stateT (swap_state exp) (itree E) (swap_response exp) :=
   fun ss =>
-    let (accounts, orders) := ss in
-    if find (findAccount uid ticker) accounts is Some (aid, _)
-    then debit aid amount ss
-    else ret (ss, Response__NotFound).
+    if min (String.length ticker) $ N.to_nat $ N.min uid amount is O
+    then ret (ss, Response__BadRequest)
+    else let (accounts, orders) := ss in
+         if find (findAccount uid ticker) accounts is Some (aid, _)
+         then debit aid amount ss
+         else ret (ss, Response__NotFound).
 
 Definition swap_handler E `(symE -< E) (req : swap_request id)
   : Monads.stateT (swap_state exp) (itree E) (swap_response exp) :=
@@ -126,6 +130,7 @@ Definition swap_handler E `(symE -< E) (req : swap_request id)
     match req with
     | Request__ListOrders => ret (ss, Response__ListOrders orders)
     | Request__ListAccount uid =>
+      if uid is 0 then ret (ss, Response__BadRequest) else
       let acs : list (accountT exp) :=
           filter (N.eqb uid ∘ fst ∘ fst ∘ snd) accounts in
       ret (ss, Response__ListAccount acs)
@@ -134,13 +139,18 @@ Definition swap_handler E `(symE -< E) (req : swap_request id)
     | Request__MakeOrder uid bt ba st sa =>
       '(s1, r1) <- withdraw uid st sa ss;;
       if r1 is Response__Account (sid, _)
-      then '(s2, bid) <- locate uid bt s1;;
-           let (a2, o2) := s2 : swap_state exp in
+      then
+        if min (String.length bt) $ N.to_nat ba is O
+        then ret (ss, Response__BadRequest)
+        else
+          '(s2, bid) <- locate uid bt s1;;
+          let (a2, o2) := s2 : swap_state exp in
            oid <- trigger Sym__Fresh;;
            let order : orderT exp := (oid, (bid, ba, sid, sa)) in
            ret (a2, order::o2, Response__Order order)
       else ret (ss, r1)
     | Request__TakeOrder uid oid =>
+      if N.min uid oid is 0 then ret (ss, Response__BadRequest) else
       let coid : exp order_id := Exp__Const oid in
       oo <- getx coid orders;;
       if oo is Some (bid, ba, sid, sa)

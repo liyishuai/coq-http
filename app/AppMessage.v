@@ -129,7 +129,8 @@ Definition orderT exp_ : Type :=
   exp_ order_id * (exp_ account_id * amountT * exp_ account_id * amountT).
 
 Variant swap_response {exp_} :=
-  Response__InsufficientFund
+  Response__BadRequest
+| Response__InsufficientFund
 | Response__NotFound
 | Response__ListAccount (l : list (accountT exp_))
 | Response__ListOrders  (l : list (orderT exp_))
@@ -141,6 +142,7 @@ Instance Serialize__response {exp_} `{Serialize (exp_ N)}
   : Serialize (swap_response exp_) :=
   fun r =>
     match r with
+    | Response__BadRequest       => [Atom 400; Atom "Bad Request"]
     | Response__InsufficientFund => [Atom 402; Atom "Payment Required"]
     | Response__NotFound         => [Atom 404; Atom "Not Found"]
     | Response__ListAccount x | Response__ListOrders x
@@ -173,6 +175,7 @@ Definition decode_response (res : http_response id)
   : option (swap_response id) :=
   let 'Response (Status _ c _) _ ob := res in
   match c with
+  | 400 => Some Response__BadRequest
   | 402 => Some Response__InsufficientFund
   | 404 => Some Response__NotFound
   | 200 =>

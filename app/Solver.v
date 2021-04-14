@@ -87,6 +87,7 @@ Definition instantiate_unify {E A} `{failureE -< E} `{decideE -< E}
                             ++ " but observed " ++ to_string r in
       let handle os' := if os' is Some s' then ret (s', tt) else mismatch in
       match rx, r with
+      | Response__BadRequest      , Response__BadRequest
       | Response__InsufficientFund, Response__InsufficientFund
       | Response__NotFound        , Response__NotFound => ret (s, tt)
       | Response__ListAccount lx  , Response__ListAccount l =>
