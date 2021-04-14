@@ -33,16 +33,7 @@ Instance Shrink__texp : Shrink (texp N) := {
     end }.
 
 Instance Shrink__request : Shrink (swap_request texp) :=
-  { shrink req :=
-      match req with
-      | Request__TakeOrder u o => Request__TakeOrder u <$> shrink o
-      | Request__MakeOrder u bt ba st sa =>
-        Request__MakeOrder u bt ba st <$> shrink sa ++
-        Request__MakeOrder u bt       <$> shrink ba <*> [st] <*> [sa]
-      | Request__Deposit   u t a => Request__Deposit  u t <$> shrink a
-      | Request__Withdraw  u t a => Request__Withdraw u t <$> shrink a
-      | _ => []
-      end }.
+  { shrink _ := [] }.
 
 Notation packetT := (packetT (swap_request id) (swap_response id)).
 Notation traceT  := (@traceT packetT).
@@ -110,9 +101,10 @@ Definition instantiate_request (tr : traceT) (rx : swap_request texp)
     Request__Withdraw    uid t        $ instantiate_exp tr ax
   end.
 
-Definition randomN : N -> IO N := fmap n_of_int ∘ ORandom.int.
+Definition randomN : N -> IO N := fmap (N.add 1 ∘ n_of_int) ∘ ORandom.int.
 
 Definition users : list user_id := [1;2;3;4].
+Definition tickers : list assetT := ["CNY";"USD";"JPY";"EUR"].
 
 Definition gen_request (ss : swap_state exp) (tr : traceT)
   : IO (swap_request texp) :=
@@ -143,9 +135,9 @@ Definition gen_request (ss : swap_state exp) (tr : traceT)
   uid <- io_choose (0::users);;
   lox <- map_if id <$> sequence (map getOrder tr);;
   oid <- io_choose_ (Texp__Const <$> genOrder) lox;;
-  bt <- io_choose ["CNY";"USD";"JPY";"EUR"];;
+  bt <- io_choose tickers;;
   ba <- randomN 1000;;
-  st <- io_choose ["CNY";"USD";"JPY";"EUR"];;
+  st <- io_choose tickers;;
   ams <- map_if id <$> sequence (map getAmount tr);;
   ax <- io_choose_ (Texp__Const <$> genAmount) ams;;
   io_choose
