@@ -87,6 +87,8 @@ Definition instantiate_exp (tr : traceT) (nx : texp N) : N :=
 Definition instantiate_request (tr : traceT) (rx : swap_request texp)
   : swap_request id :=
   match rx with
+  | Request__Clean =>
+    Request__Clean
   | Request__ListOrders =>
     Request__ListOrders
   | Request__ListAccount uid =>
@@ -177,44 +179,17 @@ Definition tester_init : IO (swap_state exp) :=
   OUnix.sleep 1;;
   s1 <- IO.fix_io
          (fun send_rec s =>
-            '(s1, oc) <- send_request Request__ListOrders s;;
+            '(s1, oc) <- send_request Request__Clean s;;
             if oc is Some _
             then ret s1
             else send_rec s1) [];;
-  '(s2, orders) <- IO.fix_io
-                    (fun recv_rec s =>
-                       '(s2, op) <- recv_response s;;
-                       match packet__payload <$> op with
-                       | Some (inr (Response__ListOrders os)) =>
-                         ret (s2, map wrap_order os)
-                       | Some (inr (Response__ListAccount [])) =>
-                         ret (s2, [])
-                       | _ => recv_rec s2
-                       end) s1;;
-  '(s3, accounts) <-
-  fold_left
-    (fun sl uid =>
-       '(s, la0) <- sl;;
-       '(s', la1) <-
-       IO.fix_io
-         (fun send_rec s0 =>
-            '(s1, oc) <- send_request (Request__ListAccount uid) s0;;
-            if oc is Some _
-            then
-              IO.fix_io
-                (fun recv_rec s1 =>
-                   '(s2, op) <- recv_response s1;;
-                   if packet__payload <$> op is Some (inr (Response__ListAccount la))
-                   then ret (s2, map wrap_account la)
-                   else recv_rec s2) s1
-            else send_rec s1) s;;
-       ret (s', la1 ++ la0)) users (ret (s2, []));;
-  cleanup s3;;
-  prerr_endline "<<<<< initial account >>>>>";;
-  prerr_endline (to_string accounts);;
-  prerr_endline "===== initial orders  =====";;
-  prerr_endline (to_string orders);;
-  ret (accounts, orders).
+  's2 <- IO.fix_io
+          (fun recv_rec s =>
+             '(s2, op) <- recv_response s;;
+             if op is Some _ then ret s2
+             else recv_rec s2) s1;;
+  cleanup s2;;
+  ret ([], []).
 
 Definition MyType := Type.
 Definition nondetE' : Type -> MyType := nondetE.
@@ -238,8 +213,8 @@ Definition Serialize__packetT    := Serialize__packetT.
 
 Definition gen_state           := swap_state exp.
 
-Definition otherE              := nondetE'.
-Definition other_handler       := or_handler.
+Definition otherE              := nondetE +' logE.
+Definition other_handler       := other_handler.
 
 Definition conn_state          := conn_state.
 Definition init_state          := [] : conn_state.

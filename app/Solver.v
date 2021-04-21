@@ -54,7 +54,7 @@ Definition unifyList {A : (Type -> Type) -> Type}
                  (zip lx l) (pure s)
   else None.
 
-Fixpoint eval_nth {E} `{decideE -< E} `{failureE -< E}
+Fixpoint eval_nth_const {E} `{decideE -< E} `{failureE -< E}
            (n : N) (l : list (exp N))
   : Monads.stateT solver_state (itree E) nat :=
   fun s =>
@@ -66,8 +66,22 @@ Fixpoint eval_nth {E} `{decideE -< E} `{failureE -< E}
              if b : bool
              then s1 <- assertSome (assertN    x n s);; ret (s1, O)
              else s1 <- assertSome (assertNotN x n s);;
-                  '(s2, n') <- eval_nth n l' s1;;
+                  '(s2, n') <- eval_nth_const n l' s1;;
                   ret (s2, S n')
+    end.
+
+Definition eval_nth {E} `{decideE -< E} `{failureE -< E}
+         (x : exp N) (l : list (exp N))
+  : Monads.stateT solver_state (itree E) nat :=
+  fun s =>
+    match x with
+    | Exp__Var x =>
+      match get x s with
+      | Some (inl n) => eval_nth_const n l s
+      | _ => ret (s, S (length l))
+      end
+    | Exp__Const n => eval_nth_const n l s
+    | _ => throw "Should not happen: eval_nth"
     end.
 
 Definition instantiate_unify {E A} `{failureE -< E} `{decideE -< E}
@@ -79,9 +93,9 @@ Definition instantiate_unify {E A} `{failureE -< E} `{decideE -< E}
       let x : var := fresh_var s in
       ret (put x (inr []) s, Exp__Var x)
     | Unify__Eval v =>
-      if v is Exp__Nth (Exp__Const n) l
+      if v is Exp__Nth n l
       then eval_nth n l s
-      else throw "Should not happen"
+      else throw "Should not happen: instantiate_unify"
     | Unify__Match rx r =>
       let mismatch := throw $ "Expect " ++ to_string rx
                             ++ " but observed " ++ to_string r in

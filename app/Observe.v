@@ -28,14 +28,14 @@ Definition dualize {q r s T E} `{Is__oE q r s E}
   | Net__Recv ss => '(Packet s d l) <- embed Observe__ToServer ss;;
                  match l with
                  | inl q => ret (Packet s d (inl q))
-                 | inr _ => throw "Should not happen"
+                 | inr _ => throw "Should not happen: dualize recv"
                  end
   | Net__Send (Packet sx dx px) =>
     '(Packet s d p) <- trigger Observe__FromServer;;
     if (sx, dx) = (s, d)?
     then if (px, p) is (inr rx, inr r)
          then embed Unify__Match rx r
-         else throw "Should not happen"
+         else throw "Should not happen: dualize send"
     else throw $ "Expect route " ++ to_string (sx, dx)
              ++ " but observed " ++ to_string (s,  d)
   end.

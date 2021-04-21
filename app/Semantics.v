@@ -121,13 +121,14 @@ Definition withdraw {E} `{symE -< E}
     else let (accounts, orders) := ss in
          if find (findAccount uid ticker) accounts is Some (aid, _)
          then debit aid amount ss
-         else ret (ss, Response__NotFound).
+         else ret (ss, Response__InsufficientFund).
 
 Definition swap_handler E `(symE -< E) (req : swap_request id)
   : Monads.stateT (swap_state exp) (itree E) (swap_response exp) :=
   fun ss =>
     let (accounts, orders) := ss in
     match req with
+    | Request__Clean => ret ([], [], Response__NoContent)
     | Request__ListOrders => ret (ss, Response__ListOrders orders)
     | Request__ListAccount uid =>
       if uid is 0 then ret (ss, Response__BadRequest) else

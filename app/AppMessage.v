@@ -36,7 +36,8 @@ Coercion string_of_nat :=
   NilZero.string_of_uint ∘ Nat.to_uint : nat -> string.
 
 Variant swap_request {exp_} :=
-  Request__ListOrders
+  Request__Clean
+| Request__ListOrders
 | Request__ListAccount (uid : user_id)
 | Request__TakeOrder (uid : user_id) (oid : exp_ order_id)
 | Request__MakeOrder (uid : user_id)
@@ -52,12 +53,14 @@ Proof. dec_eq. Defined.
 Definition swap_method (req : swap_request id) : request_method :=
   match req with
   | Request__ListOrders    | Request__ListAccount _   => Method__GET
+  | Request__Clean
   | Request__TakeOrder _ _ | Request__MakeOrder _ _ _ _ _
-  | Request__Deposit _ _ _ | Request__Withdraw  _ _ _ => Method__POST
+  | Request__Deposit _ _ _ | Request__Withdraw  _ _ _  => Method__POST
   end.
 
 Definition swap_form (req : swap_request id) : form :=
   match req with
+  | Request__Clean
   | Request__ListOrders => []
   | Request__ListAccount uid => [("user", string_of_N uid)]
   | Request__TakeOrder uid oid =>
@@ -78,6 +81,7 @@ Definition swap_form (req : swap_request id) : form :=
 
 Definition swap_target (req : swap_request id) : request_target :=
   match req with
+  | Request__Clean               => RequestTarget__Origin "clean"      None
   | Request__ListOrders          => RequestTarget__Origin "listOrders" None
   | Request__TakeOrder _ _       => RequestTarget__Origin "takeOrder"  None
   | Request__MakeOrder _ _ _ _ _ => RequestTarget__Origin "makeOrder"  None
@@ -89,6 +93,7 @@ Definition swap_target (req : swap_request id) : request_target :=
 
 Definition swap_body (req : swap_request id) : option message_body :=
   match req with
+  | Request__Clean
   | Request__ListAccount _ | Request__ListOrders => None
   | Request__TakeOrder _ _ | Request__MakeOrder _ _ _ _ _
   | Request__Deposit _ _ _ | Request__Withdraw  _ _ _ =>
@@ -112,6 +117,7 @@ Definition encode_request (req : swap_request id) : http_request id :=
 Instance Serialize__request {exp_} `{Serialize (exp_ N)}
   : Serialize (swap_request exp_) :=
   fun req => match req with
+          | Request__Clean             =>  Atom "clean"
           | Request__ListOrders        =>  Atom "listOrders"
           | Request__ListAccount uid   => [Atom "listAccount"; Atom uid]
           | Request__TakeOrder uid oid => [Atom "takeOrder"; Atom uid; to_sexp oid]
@@ -132,6 +138,7 @@ Variant swap_response {exp_} :=
   Response__BadRequest
 | Response__InsufficientFund
 | Response__NotFound
+| Response__NoContent
 | Response__ListAccount (l : list (accountT exp_))
 | Response__ListOrders  (l : list (orderT exp_))
 | Response__Account     (a : accountT exp_)
@@ -145,6 +152,7 @@ Instance Serialize__response {exp_} `{Serialize (exp_ N)}
     | Response__BadRequest       => [Atom 400; Atom "Bad Request"]
     | Response__InsufficientFund => [Atom 402; Atom "Payment Required"]
     | Response__NotFound         => [Atom 404; Atom "Not Found"]
+    | Response__NoContent        => [Atom 204; Atom "No Content"]
     | Response__ListAccount x | Response__ListOrders x
     | Response__Account     x | Response__Order      x => [Atom 200; to_sexp x]
     end%sexp.
@@ -178,6 +186,7 @@ Definition decode_response (res : http_response id)
   | 400 => Some Response__BadRequest
   | 402 => Some Response__InsufficientFund
   | 404 => Some Response__NotFound
+  | 204 => Some Response__NoContent
   | 200 =>
     body <- (ob : option string);;
     if from_string body is inr j
