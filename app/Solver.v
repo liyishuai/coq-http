@@ -70,19 +70,27 @@ Fixpoint eval_nth_const {E} `{decideE -< E} `{failureE -< E}
                   ret (s2, S n')
     end.
 
+Fixpoint find_nth {A} (f : A -> bool) (l : list A) : option nat :=
+  if l is a::l'
+  then if f a then Some O else S <$> find_nth f l'
+  else None.
+
 Definition eval_nth {E} `{decideE -< E} `{failureE -< E}
          (x : exp N) (l : list (exp N))
   : Monads.stateT solver_state (itree E) nat :=
   fun s =>
-    match x with
-    | Exp__Var x =>
-      match get x s with
-      | Some (inl n) => eval_nth_const n l s
-      | _ => ret (s, S (length l))
-      end
-    | Exp__Const n => eval_nth_const n l s
-    | _ => throw "Should not happen: eval_nth"
-    end.
+    if find_nth (exp_eq x) l is Some n
+    then ret (s, n)
+    else
+      match x with
+      | Exp__Var x =>
+        match get x s with
+        | Some (inl n) => eval_nth_const n l s
+        | _ => ret (s, length l)
+        end
+      | Exp__Const n => eval_nth_const n l s
+      | _ => throw "Should not happen: eval_nth"
+      end.
 
 Definition instantiate_unify {E A} `{failureE -< E} `{decideE -< E}
            (e : unifyE swap_response A)

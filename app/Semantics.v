@@ -15,6 +15,14 @@ Inductive exp : Type -> Type :=
 | Exp__Const : N   -> exp N
 | Exp__Nth   : exp N -> list (exp N) -> exp nat.
 
+Fixpoint exp_eq {X Y} (x : exp X) (y : exp Y) : bool :=
+  match x, y with
+  | Exp__Var   a, Exp__Var   b
+  | Exp__Const a, Exp__Const b => a = b?
+  | Exp__Nth x l, Exp__Nth y m => exp_eq x y &&& eqb_list exp_eq l m
+  | _, _ => false
+  end.
+
 Fixpoint exp_to_sexp {T} (e : exp T) : sexp :=
   match e with
   | Exp__Var   x => [Atom "Variable"; Atom x]

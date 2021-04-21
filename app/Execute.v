@@ -175,8 +175,12 @@ Definition wrap_account (a : accountT id) : accountT exp :=
   let '(aid, av) := a in
   (Exp__Const aid, av).
 
+Parameter sleepf : float -> IO unit.
+Extract Constant sleepf => "fun f k -> k (Unix.sleepf f)".
+Definition sleep_time : float := OFloat.Unsafe.of_string "0.1".
+
 Definition tester_init : IO (swap_state exp) :=
-  OUnix.sleep 1;;
+  sleepf sleep_time;;
   s1 <- IO.fix_io
          (fun send_rec s =>
             '(s1, oc) <- send_request Request__Clean s;;
