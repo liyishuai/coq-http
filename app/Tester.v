@@ -40,7 +40,7 @@ CoFixpoint tester' (others : list (itree swap_stE void))
   | TauF m' => Tau (tester' others m')
   | VisF e k =>
     let catch (err : string) : itree tE void :=
-        (* embed Log err;; *)
+        embed Log err;;
         if others is other::others'
         then Tau (tester' others' other)
         else throw err in

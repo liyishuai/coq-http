@@ -76,7 +76,10 @@ Definition instantiate_exp (tr : traceT) (nx : texp N) : N :=
          let '(l0, Packet _ _ p) := lp in
          if l0 = l? then
            match p with
+           | inr (Response__Order (_, (_, a, _, _)))
            | inr (Response__Account (_, (_, _, a))) => Some a
+           | inr (Response__ListOrders l) =>
+             snd ∘ fst ∘ fst ∘ snd <$> nth_error l (min k (pred (length l)))
            | inr (Response__ListAccount l) =>
              snd ∘ snd <$> nth_error l (min k (pred (length l)))
            | _ => None
@@ -97,8 +100,8 @@ Definition instantiate_request (tr : traceT) (rx : swap_request texp)
     Request__TakeOrder   uid          $ instantiate_exp tr ox
   | Request__MakeOrder   uid bt ba st sax =>
     Request__MakeOrder   uid bt ba st $ instantiate_exp tr sax
-  | Request__Deposit     uid t a =>
-    Request__Deposit     uid t a
+  | Request__Deposit     uid t ax =>
+    Request__Deposit     uid t        $ instantiate_exp tr ax
   | Request__Withdraw    uid t ax =>
     Request__Withdraw    uid t        $ instantiate_exp tr ax
   end.
@@ -122,32 +125,36 @@ Definition gen_request (ss : swap_state exp) (tr : traceT)
   let genOrder : IO order_id :=
       let getOid (o : orderT exp) : option order_id :=
           if fst o is Exp__Const n then Some n else None in
-      io_choose_ (ret 0) (map_if getOid orders) in
+      io_choose_ (ret 1) (map_if getOid orders) in
   let getAmount (lp : labelT * packetT) : IO (option (texp amountT)) :=
       let '(l, Packet _ _ p) := lp in
-      pc <- randomN 6;;
+      pc <- randomN 8;;
       match p with
+      | inr (Response__Order _)
       | inr (Response__Account _) => ret $ Some (Texp__Amount l O pc)
+      | inr (Response__ListOrders ((_::_) as la))
       | inr (Response__ListAccount ((_::_) as la)) =>
-             Some <$> (Texp__Amount l <$> (fst <$> io_choose' la) <*> (ret pc))
+        Some <$> (Texp__Amount l <$> (fst <$> io_choose' la) <*> (ret pc))
       | _ => ret None
       end in
+  ba <- randomN 100;;
   let genAmount : IO amountT :=
-      io_choose_ (ret 100) (map (snd ∘ snd) accounts) in
-  uid <- io_choose (0::users);;
+      io_choose_ (ret ba) (map (snd ∘ snd) accounts ++
+                            map (snd ∘ fst ∘ fst ∘ snd) orders) in
+  uid <- io_choose (1::users);;
   lox <- map_if id <$> sequence (map getOrder tr);;
   oid <- io_choose_ (Texp__Const <$> genOrder) lox;;
   bt <- io_choose tickers;;
-  ba <- randomN 1000;;
   st <- io_choose tickers;;
   ams <- map_if id <$> sequence (map getAmount tr);;
+  (* prerr_endline (to_string (tr, ams));; *)
   ax <- io_choose_ (Texp__Const <$> genAmount) ams;;
   io_choose
     [Request__ListOrders;
      Request__ListAccount uid;
      Request__TakeOrder   uid oid;
      Request__MakeOrder   uid bt ba st ax;
-     Request__Deposit     uid bt ba;
+     Request__Deposit     uid bt ax;
      Request__Withdraw    uid st ax].
 
 Definition send_request : swap_request id ->
@@ -162,7 +169,8 @@ Definition recv_response : Monads.stateT conn_state IO (option packetT) :=
     (* then liftState (prerr_endline (to_string sres));; *)
     (*      ret (Some (Packet s d (inr sres))) *)
     (* else *)
-    (*   liftState (prerr_endline "Invalid response");; *)
+    (*   liftState (prerr_endline $ "Invalid response: " ++ *)
+    (*                            response_to_string res)%string;; *)
     (*   ret None *)
     ret (decode_response res >>= Some ∘ Packet s d ∘ inr)
   else ret None.
@@ -181,19 +189,18 @@ Definition sleep_time : float := OFloat.Unsafe.of_string "0.1".
 
 Definition tester_init : IO (swap_state exp) :=
   sleepf sleep_time;;
-  s1 <- IO.fix_io
-         (fun send_rec s =>
-            '(s1, oc) <- send_request Request__Clean s;;
-            if oc is Some _
-            then ret s1
-            else send_rec s1) [];;
-  's2 <- IO.fix_io
-          (fun recv_rec s =>
-             '(s2, op) <- recv_response s;;
-             if op is Some _ then ret s2
-             else recv_rec s2) s1;;
-  cleanup s2;;
-  ret ([], []).
+  IO.fix_io
+    (fun clean s =>
+       (fst <$> send_request Request__Clean s >>=
+            IO.fix_io
+            (fun recv_rec s1 =>
+               '(s2, op) <- recv_response s1;;
+               match op with
+               | Some (Packet _ _ (inr Response__NoContent)) =>
+                 cleanup s2;; ret ([], [])
+               | Some _ => clean s2
+               | None => recv_rec s2
+               end))) [].
 
 Definition MyType := Type.
 Definition nondetE' : Type -> MyType := nondetE.

@@ -13,7 +13,7 @@ Definition assertN (nx : exp N) (n : N) (s : solver_state)
     | Some (inl n0) => if n0 =? n then Some s else None
     | Some (inr ns) => if existsb (N.eqb n) ns
                       then None
-                      else Some $ update x (inr (n::ns)) s
+                      else Some $ update x (inl n) s
     | None => Some $ put x (inl n) s
     end
   | Exp__Const n0 => if n0 =? n then Some s else None
@@ -58,16 +58,20 @@ Fixpoint eval_nth_const {E} `{decideE -< E} `{failureE -< E}
            (n : N) (l : list (exp N))
   : Monads.stateT solver_state (itree E) nat :=
   fun s =>
-    let assertSome (ost : option solver_state) : itree E solver_state :=
-        if ost is Some st then ret st else throw "Unsatisfiable" in
     match l with
     | [] => ret (s, O)
-    | x::l' => b <- trigger Decide;;
-             if b : bool
-             then s1 <- assertSome (assertN    x n s);; ret (s1, O)
-             else s1 <- assertSome (assertNotN x n s);;
-                  '(s2, n') <- eval_nth_const n l' s1;;
-                  ret (s2, S n')
+    | x::l' =>
+      let left  s1 := ret (s1, O) in
+      let right s2 := '(s3, n') <- eval_nth_const n l' s2;;
+                      ret (s3, S n') in
+      match assertN x n s, assertNotN x n s with
+      | Some s1, Some s2 =>
+        b <- trigger Decide;;
+        if b : bool then left s1 else right s2
+      | Some s1, None => left s1
+      | None, Some s2 => right s2
+      | None, None => throw "Unsatisfiable"
+      end
     end.
 
 Fixpoint find_nth {A} (f : A -> bool) (l : list A) : option nat :=
@@ -106,7 +110,8 @@ Definition instantiate_unify {E A} `{failureE -< E} `{decideE -< E}
       else throw "Should not happen: instantiate_unify"
     | Unify__Match rx r =>
       let mismatch := throw $ "Expect " ++ to_string rx
-                            ++ " but observed " ++ to_string r in
+                            ++ " but observed " ++ to_string r
+                            ++ " under " ++ to_string s in
       let handle os' := if os' is Some s' then ret (s', tt) else mismatch in
       match rx, r with
       | Response__BadRequest      , Response__BadRequest

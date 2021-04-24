@@ -185,7 +185,7 @@ Fixpoint execute' {R} (fuel : nat) (s : conn_state)
 Definition execute {R} (m : tester_state -> itree tE R) (oscript : option scriptT)
   : IO (bool * (scriptT * traceT)) :=
   tester_init_state <- tester_init;;
-  '(b, s, t') <- execute' 50000 init_state oscript ([], []) (m tester_init_state);;
+  '(b, s, t') <- execute' 1000000 init_state oscript ([], []) (m tester_init_state);;
   cleanup s;;
   ret (b, t').
 

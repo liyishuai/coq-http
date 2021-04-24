@@ -43,7 +43,7 @@ Variant swap_request {exp_} :=
 | Request__MakeOrder (uid : user_id)
                    (buyTicker  : assetT) (buyAmount  :      amountT)
                    (sellTicker : assetT) (sellAmount : exp_ amountT)
-| Request__Deposit   (uid : user_id) (ticker : assetT) (amount :      amountT)
+| Request__Deposit   (uid : user_id) (ticker : assetT) (amount : exp_ amountT)
 | Request__Withdraw  (uid : user_id) (ticker : assetT) (amount : exp_ amountT).
 Arguments swap_request : clear implicits.
 
@@ -123,7 +123,7 @@ Instance Serialize__request {exp_} `{Serialize (exp_ N)}
           | Request__TakeOrder uid oid => [Atom "takeOrder"; Atom uid; to_sexp oid]
           | Request__MakeOrder uid bt ba st sa =>
             [Atom "makeOrder"; Atom uid; Atom bt; Atom ba; Atom st; to_sexp sa]
-          | Request__Deposit uid t a => [Atom "deposit"; Atom uid; Atom t; Atom a]
+          | Request__Deposit uid t a => [Atom "deposit"; Atom uid; Atom t; to_sexp a]
           | Request__Withdraw uid t a =>
             [Atom "withdraw"; Atom uid; Atom t; to_sexp a]
           end%sexp.
@@ -138,6 +138,7 @@ Variant swap_response {exp_} :=
   Response__BadRequest
 | Response__InsufficientFund
 | Response__NotFound
+| Response__InternalServerError
 | Response__NoContent
 | Response__ListAccount (l : list (accountT exp_))
 | Response__ListOrders  (l : list (orderT exp_))
@@ -153,6 +154,7 @@ Instance Serialize__response {exp_} `{Serialize (exp_ N)}
     | Response__InsufficientFund => [Atom 402; Atom "Payment Required"]
     | Response__NotFound         => [Atom 404; Atom "Not Found"]
     | Response__NoContent        => [Atom 204; Atom "No Content"]
+    | Response__InternalServerError => [Atom 500; Atom "Internal Server Error"]
     | Response__ListAccount x | Response__ListOrders x
     | Response__Account     x | Response__Order      x => [Atom 200; to_sexp x]
     end%sexp.
@@ -186,6 +188,7 @@ Definition decode_response (res : http_response id)
   | 400 => Some Response__BadRequest
   | 402 => Some Response__InsufficientFund
   | 404 => Some Response__NotFound
+  | 500 => Some Response__InternalServerError
   | 204 => Some Response__NoContent
   | 200 =>
     body <- (ob : option string);;
