@@ -21,8 +21,8 @@ Fixpoint findResponse (s : conn_state)
     | inr (r, str') =>
       (* curr <- OFloat.to_string <$> OUnix.gettimeofday;; *)
       (* prerr_endline curr;; *)
-      (* prerr_endline ("==============RECEIVED==============" *)
-      (*                  ++ to_string c ++ CRLF ++ response_to_string r);; *)
+      prerr_endline ("==============RECEIVED=============="
+                       ++ to_string c ++ CRLF ++ response_to_string r);;
       ret (Some (Packet Conn__Server (Conn__User c) (inr r)), (c, (f, str')) :: t)
     end
   end.
@@ -44,9 +44,9 @@ Fixpoint findRequest'
       | inl None => '(or, t') <- findRequest' t;;
                    ret (or, conn :: t')
       | inr (r, str') =>
-        (* prerr_endline ("===========PROXY RECEIVED===========" *)
-        (*                  ++ to_string c *)
-        (*                  ++ CRLF ++ request_to_string r);; *)
+        prerr_endline ("===========PROXY RECEIVED==========="
+                         ++ to_string c
+                         ++ CRLF ++ request_to_string r);;
         ret (Some (c, r), (c, (fd, str', Some r)) :: t)
       end
     end.
@@ -122,11 +122,11 @@ Definition gen_etag (p : path) (s : server_state exp) (es : exp_state)
 
 Definition random_request (origin_port : N) (s : server_state exp) (es : exp_state)
   : IO http_request :=
-  m <- io_or (ret Method__GET) (ret Method__PUT);;
-  p <- gen_path s;;
   (* let a := Authority None "localhost" (Some server_port) in *)
   a <- io_or (ret $ Authority None "localhost" (Some server_port))
             (ret $ Authority None "host.docker.internal" (Some origin_port));;
+  m <- io_or (ret Method__GET) (ret Method__PUT);;
+  p <- gen_path s;;
   let uri : absolute_uri :=
       URI Scheme__HTTP a p None in
   let l : request_line :=
@@ -381,7 +381,7 @@ Fixpoint execute' {R} (fuel : nat) (port : N) (s : tester_state) (n : nat) (m : 
     | TauF m' => execute' fuel port s n m'
     | VisF e k =>
       match e with
-      | (Throw err|) => (* prerr_endline err;;  *)ret (false, s, n)
+      | (Throw err|) => prerr_endline err;; ret (false, s, n)
       | (|ne|) =>
         match ne in nondetE Y return (Y -> _) -> _ with
         | Or =>
@@ -404,14 +404,16 @@ Fixpoint execute' {R} (fuel : nat) (port : N) (s : tester_state) (n : nat) (m : 
   end.
 
 Definition execute {R} (m : itree tE R) : IO (bool * nat) :=
-  (* prerr_endline "<<<<< begin test >>>>>>>";; *)
+  prerr_endline "<<<<< begin test >>>>>>>";;
   '(port, sfd) <- create_sock;;
   '(b, s, n) <- execute' 5000 port ([], (sfd, port, [], [])) O m;;
   let '(cs, (sfd, _, conns, _)) := s in
   fold_left (fun m fd => OUnix.close fd;; m)
             (map (fst ∘ snd) cs ++ map (fst ∘ fst ∘ snd) conns)
             (OUnix.close sfd);;
-  (* prerr_endline "<<<<<<< end test >>>>>>>";; *)
+  prerr_endline (if b : bool
+                 then "<<<<< pass  test >>>>>>>"
+                 else "<<<<< fail  test >>>>>>>");;
   ret (b, n).
 
 Definition test {R} : itree smE R -> IO (bool * nat) :=

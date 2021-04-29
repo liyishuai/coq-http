@@ -132,7 +132,7 @@ Definition instantiate_unify {E A} `{Is__stE E} (e : unifyE A)
         end
       else throw $ "Expect status " ++ status_to_string stx
                  ++ " but observed " ++ status_to_string st
-                 ++ ", under state " ++ to_string s
+                 (* ++ ", under state " ++ to_string s *)
     | Unify__Match bx b =>
       (* embed Log ("Unifying " ++ to_string bx ++ " against " ++ to_string b *)
       (*                        ++ ", under state " ++ to_string xs);; *)

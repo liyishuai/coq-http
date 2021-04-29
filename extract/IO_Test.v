@@ -24,8 +24,9 @@ Definition run_time {A} `{Serialize A} (x : IO A) : IO A :=
   start_time <- OUnix.gettimeofday;;
   a <- x;;
   end_time <- OUnix.gettimeofday;;
-  prerr_endline (ostring_app (OFloat.to_string (end_time - start_time))
-                             (String "," (to_string a)));;
+  prerr_endline (ostring_app "Time elapsed: " $
+                 ostring_app (OFloat.to_string (end_time - start_time)) $
+                 ostring_app "s; Messages sent and received: " (to_string a));;
   ret a.
 
 (** Repeat [n0 + 1] times. *)

@@ -181,8 +181,8 @@ Definition send_request (c : clientT) (req : http_request) : stateT conn_state I
              else
                if o + sent =? len
                then
-                 (* prerr_endline ("================SENT================" *)
-                 (*                     ++ to_string c ++ CRLF ++ str);; *)
+                 prerr_endline ("================SENT================"
+                                     ++ to_string c ++ CRLF ++ str);;
                  ret true
                else send_rec (o + sent))%int int_zero;;
         ret (b, s)
@@ -215,9 +215,9 @@ Definition send_response (c : clientT) (res : http_response id) : stateT origin_
                   else
                     if o + sent =? len
                     then
-                      (* prerr_endline ("=============PROXY SENT=============" *)
-                      (*                  ++ to_string c *)
-                      (*                  ++ CRLF ++ str);; *)
+                      prerr_endline ("=============PROXY SENT============="
+                                       ++ to_string c
+                                       ++ CRLF ++ str);;
                       ret true
                     else send_rec (o + sent))%int int_zero;;
          ret (b, s)
