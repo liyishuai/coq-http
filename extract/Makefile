@@ -29,7 +29,8 @@ CPORT?=80
 server: stop
 	if [ $$(which docker) ]; \
 		then \
-		     docker run -d --name $@ -p $(PORT):$(CPORT) $(SERVER); \
+		     docker run -d --name $@ -p $(PORT):$(CPORT) \
+			 --add-host=host.docker.internal:host-gateway $(SERVER); \
 		else echo Docker not found; \
 		     exit 1; \
 	fi
