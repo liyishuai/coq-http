@@ -8,6 +8,7 @@ ishrink/IShrink.v
 theories/Message.v
 theories/Printer.v
 theories/Parser.v
+theories/Decode.v
 theories/Instances.v
 theories/Semantics.v
 theories/Tcp.v
