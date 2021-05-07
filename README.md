@@ -26,10 +26,8 @@ HTTP specification in Coq, testable and verifiable
 - Compatible Coq versions: 8.13 or later
 - Additional dependencies:
   - [OCamlbuild](https://github.com/ocaml/ocamlbuild)
-  - [ITreeIO](https://github.com/Lysxia/coq-itree-io)
-  - [Parsec](https://github.com/liyishuai/coq-parsec)
   - [QuickChick](https://github.com/QuickChick/QuickChick/)
-  - [JSON](https://github.com/liyishuai/coq-json)
+  - [AsyncTest](https://github.com/liyishuai/coq-async-test)
 - Coq namespace: `HTTP`
 - Related publication(s):
   - [From C to Interaction Trees:

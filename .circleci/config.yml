@@ -33,7 +33,6 @@ jobs:
     - run:
         name: Build, test, and install package
         command: opam install -t .
-
     - run:
         name: Uninstall package
         command: opam uninstall .
