@@ -7,6 +7,7 @@ ishrink/Common.v
 ishrink/IShrink.v
 theories/Message.v
 theories/Printer.v
+theories/Encode.v
 theories/Parser.v
 theories/Decode.v
 theories/Instances.v
@@ -16,7 +17,7 @@ theories/NetUnix.v
 theories/Trace.v
 theories/Observe.v
 theories/Tester.v
-theories/Execute.v
+# theories/Execute.v
 app/Form.v
 app/AppMessage.v
 app/Semantics.v
@@ -24,4 +25,4 @@ app/Tcp.v
 app/Observe.v
 app/Solver.v
 app/Tester.v
-app/Execute.v
+# app/Execute.v
