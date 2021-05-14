@@ -10,8 +10,10 @@ theories/Printer.v
 theories/Encode.v
 theories/Parser.v
 theories/Decode.v
+theories/Codec.v
 theories/Instances.v
 theories/Semantics.v
+theories/Gen.v
 theories/Tcp.v
 theories/NetUnix.v
 theories/Trace.v
@@ -21,8 +23,8 @@ theories/Tester.v
 app/Form.v
 app/AppMessage.v
 app/Semantics.v
-app/Tcp.v
-app/Observe.v
-app/Solver.v
-app/Tester.v
+# app/Tcp.v
+# app/Observe.v
+# app/Solver.v
+# app/Tester.v
 # app/Execute.v

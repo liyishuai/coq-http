@@ -9,7 +9,7 @@ From Ceres Require Export
 From ExtLib Require Export
      Extras.
 From HTTP Require Export
-     Decode.
+     Message.
 Export FunNotation.
 Open Scope program_scope.
 
@@ -120,9 +120,3 @@ Definition response_to_string (r : http_response id) : string :=
   status_to_string s ++ CRLF ++
   fields_to_string fs ++ CRLF ++
   body_to_string ob.
-
-Definition jreq_to_string : json -> string :=
-  request_to_string ∘ request_of_json.
-
-Definition jres_to_string : json -> string :=
-  response_to_string ∘ response_of_json.

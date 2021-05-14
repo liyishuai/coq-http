@@ -30,44 +30,6 @@ Fixpoint findResponse (s : conn_state)
     end
   end.
 
-Definition io_choose_ {A} (default : IO A) (l : list A) : IO A :=
-  match l with
-  | [] => default
-  | a :: _ =>
-    i <- nat_of_int <$> ORandom.int (int_of_nat (length l));;
-    ret (nth i l a)
-  end.
-
-Definition io_choose' {A} (l : list A) : IO (nat * A) :=
-  match l with
-  | [] => failwith "Cannot choose from empty list"
-  | a :: _ =>
-    i <- nat_of_int <$> ORandom.int (int_of_nat (length l));;
-    ret (i, nth i l a)
-  end.
-
-Definition io_choose {A} : list A -> IO A :=
-  fmap snd ∘ io_choose'.
-
-Definition io_or {A} (x y : IO A) : IO A :=
-  b <- ORandom.bool tt;;
-  if b : bool then x else y.
-
-Definition gen_string' : IO string :=
-  io_choose ["Hello"; "World"].
-
-Fixpoint gen_many {A} (n : nat) (ma : IO A) : IO (list A) :=
-  match n with
-  | O => ret []
-  | S n' => liftA2 cons ma $ io_or (ret []) (gen_many n' ma)
-  end.
-
-Definition gen_string : IO string :=
-  String "~" ∘ String.concat "" <$> gen_many 3 gen_string'.
-
-Definition gen_path (s : server_state exp) : IO path :=
-  io_choose_ gen_string (map fst s).
-
 Fixpoint pick_some {A} (l : list (option A)) : list A :=
   match l with
   | [] => []
@@ -129,26 +91,6 @@ Definition gen_request (ss : server_state exp) (tr : traceT)
     ret $ Request l (host_field::tag_field) None
   | _ => ret $ Request l [host_field] None
   end%string.
-
-Fixpoint map_if {A B} (f : A -> option B) (l : list A) : list B :=
-  if l is a::l'
-  then (if f a is Some b then cons b else id) (map_if f l')
-  else [].
-
-Definition instantiate_field (tr : traceT) (tx : texp field_value)
-  : field_value :=
-  match tx with
-  | Texp__Random  => """Random"""
-  | Texp__Const v => v
-  | Texp__Var x   =>
-    if map_if (get_tag ∘ snd) tr is t::_ then t else """Unknown"""
-  end.
-
-Definition instantiate_request (tr : traceT) (rx : http_request texp)
-  : http_request id :=
-  let 'Request l fx b := rx in
-  let fs := map (fun '(Field n vx) => Field n (instantiate_field tr vx)) fx in
-  Request l fs b.
 
 Definition http_tester {E} `{Is__tE E} : itree E void :=
   tester $ observer $ compose_switch tcp http_smi.

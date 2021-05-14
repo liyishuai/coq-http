@@ -1,3 +1,5 @@
+From AsyncTest Require Export
+     Common.
 From JSON Require Export
      Decode.
 From Coq Require Export
@@ -55,14 +57,17 @@ Instance JDecode__version : JDecode http_version :=
 Instance JDecode__RequestLine : JDecode request_line :=
   fun j => liftA2 RequestLine (decode j) (dpath "target" j) <*> (decode j).
 
-Instance JDecode__Field : JDecode (field_line id) :=
-  fun j => liftA2 Field (dpath "name" j) (dpath "value" j).
+Instance JDecode__Fields : JDecode (list (field_line id)) :=
+  fun j => if j is JSON__Object l
+         then inr $ map_ifr (fun kv => let (k, v) := kv : string * json in
+                                     Field k <$> decode v) l
+         else inl $ "Not an object: " ++ Printer.to_string j.
 
 Instance JDecode__Request : JDecode (http_request id) :=
   fun j => liftA2 Request (decode j) (dpath "fields" j) <*> (dpath "body" j).
 
 Instance JDecode__Status : JDecode status_line :=
-  fun j => liftA2 Status (decode j) (dpath "code" j) <*> (dpath "phrase" j).
+  fun j => liftA2 Status (decode j) (dpath "code" j) <*> (dpath "reason" j).
 
 Instance JDecode__Response : JDecode (http_response id) :=
   fun j => liftA2 Response (decode j) (dpath "fields" j) <*> (dpath "body" j).

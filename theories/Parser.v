@@ -3,7 +3,7 @@ From ExtLib Require Export
      OptionMonad
      Reducible.
 From HTTP Require Export
-     Message.
+     Encode.
 From Parsec Require Export
      Core.
 From Coq Require Import
@@ -301,3 +301,6 @@ Definition parseResponse : parser (http_response id) :=
   | _ => parseBody f
   end;;
   ret (Response l f b).
+
+Definition parseJres : parser IR :=
+  encode <$> parseResponse.
