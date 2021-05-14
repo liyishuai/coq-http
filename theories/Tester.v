@@ -1,8 +1,9 @@
-From IShrink Require Export
-     IShrink.
+From AsyncTest Require Export
+     AsyncTest.
 From ExtLib Require Export
      OptionMonad.
 From HTTP Require Export
+     Decode
      Printer
      Observe.
 Open Scope N_scope.
@@ -198,10 +199,17 @@ CoFixpoint match_event {T R} (e0 : testerE R) (r : R) (m : itree stE T)
 Definition match_observe {T R} (e : testerE T) (r : T) (l : list (itree stE R))
   : list (itree stE R) := map (match_event e r) l.
 
-Notation clientE := (@clientE (packetT id) (server_state exp)).
+Definition packet_req (p : Trace.packetT) : packetT id :=
+  let 'Trace.Packet s d j := p in
+  Packet s d (inl $ request_of_IR j).
 
-Class Is__tE E`{failureE -< E} `{clientE -< E} `{nondetE -< E} `{logE -< E}.
-Notation tE := (failureE +' clientE +' nondetE +' logE).
+Definition packet_res (p : Trace.packetT) : packetT id :=
+  let 'Trace.Packet s d j := p in
+  Packet s d (inr $ response_of_IR j).
+
+Class Is__tE E`{failureE -< E} `{@clientE (server_state exp) -< E}
+      `{nondetE -< E} `{logE -< E}.
+Notation tE := (failureE +' @clientE (server_state exp) +' nondetE +' logE).
 Instance tE_Is__tE : Is__tE tE. Defined.
 
 CoFixpoint backtrack' {E R} `{Is__tE E} (others : list (itree stE R))
@@ -236,7 +244,7 @@ CoFixpoint backtrack' {E R} `{Is__tE E} (others : list (itree stE R))
         fun k => op1 <- trigger Client__Recv;;
               match op1 with
               | Some p1 =>
-                match match_observe Tester__Recv p1 others with
+                match match_observe Tester__Recv (packet_res p1) others with
                 | [] => catch "Unexpected receive from server"
                 | other :: others' =>
                   Tau (backtrack' others' other)
@@ -245,8 +253,9 @@ CoFixpoint backtrack' {E R} `{Is__tE E} (others : list (itree stE R))
                 opkt <- embed Client__Send st;;
                 match opkt with
                 | Some pkt =>
+                  let p : packetT id := packet_req pkt in
                   Tau (backtrack' (match_observe (Tester__Send st)
-                                                 pkt others) (k pkt))
+                                                 p others) (k p))
                 | None => catch "Not ready to send"
                 end
               end
@@ -254,7 +263,8 @@ CoFixpoint backtrack' {E R} `{Is__tE E} (others : list (itree stE R))
         fun k => opkt <- embed Client__Recv;;
               match opkt with
               | Some pkt =>
-                Tau (backtrack' (match_observe Tester__Recv pkt others) (k pkt))
+                let p : packetT id := packet_res pkt in
+                Tau (backtrack' (match_observe Tester__Recv p others) (k p))
               | None =>
                 match others with
                 | [] =>

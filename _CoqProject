@@ -19,7 +19,7 @@ theories/NetUnix.v
 theories/Trace.v
 theories/Observe.v
 theories/Tester.v
-# theories/Execute.v
+theories/Execute.v
 app/Form.v
 app/AppMessage.v
 app/Semantics.v

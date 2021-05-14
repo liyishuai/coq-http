@@ -7,13 +7,6 @@ Export SumNotations.
 Open Scope nat_scope.
 Open Scope sum_scope.
 
-Variant connT :=
-  Conn__User      : clientT -> connT
-| Conn__Server.
-
-Global Instance Dec_Eq__connT : Dec_Eq connT.
-Proof. dec_eq. Defined.
-
 Definition payloadT exp_ : Type := http_request id + http_response exp_.
 
 Record packetT {exp_} :=
@@ -34,13 +27,6 @@ Instance Serialize__payloadT : Serialize (payloadT id) :=
     | inl (Request  line   _ _) => Atom $ line_to_string   line
     | inr (Response status _ _) => Atom $ status_to_string status
     end.
-
-Instance Serialize__connT : Serialize connT :=
-  fun c =>
-    match c with
-    | Conn__User      c => [Atom "User"; to_sexp c]
-    | Conn__Server      => [Atom "Server"]
-    end%sexp.
 
 Instance Serialize__packetT : Serialize (packetT id) :=
   fun pkt =>
@@ -109,11 +95,11 @@ Instance nE_Is__nE : Is__nE nE. Defined.
 Definition packet_to_server {exp_} (p : packetT exp_) : bool :=
   match packet__dst p with
   | Conn__Server => true
-  | Conn__User _ => false
+  | Conn__Client _ => false
   end.
 Definition packet_from_user {exp_} (p : packetT exp_) : bool :=
   match packet__src p with
-  | Conn__User _ => true
+  | Conn__Client _ => true
   | Conn__Server => false
   end.
 
@@ -168,13 +154,13 @@ CoFixpoint compose' {E R} `{Is__nE E}
           | Some (pkt, bi') =>
             let 'Packet s _ p := pkt in
             match s, p with
-            | Conn__User c, inl r => Tau (compose' conns bi' bfo net (k (c, r)))
+            | Conn__Client c, inl r => Tau (compose' conns bi' bfo net (k (c, r)))
             | _, _ => Tau (compose' conns bi' bfo net app) (* drop the packet *)
             end
           end
       | App__Send c r =>
         fun k =>
-          Tau (compose' conns bfi (bfo ++ [Packet Conn__Server (Conn__User c) (inr r)])
+          Tau (compose' conns bfi (bfo ++ [Packet Conn__Server (Conn__Client c) (inr r)])
                         net (k tt))
       end ka
     | (|ne|) =>

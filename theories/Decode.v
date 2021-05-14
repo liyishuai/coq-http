@@ -72,11 +72,11 @@ Instance JDecode__Status : JDecode status_line :=
 Instance JDecode__Response : JDecode (http_response id) :=
   fun j => liftA2 Response (decode j) (dpath "fields" j) <*> (dpath "body" j).
 
-Definition request_of_json (j : json) : http_request id :=
+Definition request_of_IR (j : json) : http_request id :=
   if decode j is inr req then req
   else Request (RequestLine (Method "BREW") RequestTarget__Asterisk (Version 1 0))
                [] None.
 
-Definition response_of_json (j : json) : http_response id :=
+Definition response_of_IR (j : json) : http_response id :=
   if decode j is inr res then res
   else Response (Status (Version 1 0) 418 None) [] None.

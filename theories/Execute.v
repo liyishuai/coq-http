@@ -2,18 +2,21 @@ From SimpleIO Require Export
      IO_Float
      IO_Random.
 From HTTP Require Export
+     Gen
      NetUnix
      Parser
      Tester.
+From AsyncTest Require Export
+     AsyncTest.
 Open Scope string_scope.
 
 Fixpoint findResponse (s : conn_state)
-  : IO (conn_state * option (packetT id)) :=
+  : IO (conn_state * option packetT) :=
   match s with
   | [] => ret ([], None)
   | cfs :: t =>
     let '(c, (f, str)) := cfs in
-    match parse parseResponse str with
+    match parse parseJres str with
     | inl (Some err) =>
       failwith $ "Bad response " ++ to_string str ++ " received on connection "
                ++ to_string c ++ ", error message: " ++ err
@@ -26,76 +29,30 @@ Fixpoint findResponse (s : conn_state)
       (* prerr_endline curr;; *)
       (* prerr_endline ("==============RECEIVED==============" *)
       (*                  ++ to_string c ++ CRLF ++ response_to_string r);; *)
-      ret ((c, (f, str')) :: t, Some (Packet Conn__Server (Conn__User c) (inr r)))
+      ret ((c, (f, str')) :: t, Some (Packet Conn__Server (Conn__Client c) r))
     end
   end.
 
-Fixpoint pick_some {A} (l : list (option A)) : list A :=
-  match l with
-  | [] => []
-  | Some a :: l' => a :: pick_some l'
-  | None   :: l' =>     pick_some l'
-  end.
+Definition recv_http_response : Monads.stateT conn_state IO (option Trace.packetT) :=
+  recv_bytes;; findResponse.
 
-Variant texp : Type -> Set :=
-  Texp__Const  : field_value -> texp field_value
-| Texp__Var    : labelT      -> texp field_value
-| Texp__Random :               texp field_value.
+Definition new_conn (tr : traceT) : clientT :=
+  S $ fold_left (fun n p =>
+                   let 'Packet src dst _ := p in
+                   max n $
+                       match src, dst with
+                       | Conn__Client s, Conn__Client d => max s d
+                       | Conn__Client x, _
+                       | _, Conn__Client x => x
+                       | _, _ => O
+                       end) (map snd tr) O.
 
-Instance Serialize__texp : Serialize (texp field_value) :=
-  fun tx => match tx with
-         | Texp__Const v => Atom v
-         | Texp__Var x   => [Atom "Step"; to_sexp x]%sexp
-         | Texp__Random  => Atom "Random"
-         end.
-
-Instance Serialize__request {exp_} `{Serialize (exp_ field_value)}
-  : Serialize (http_request exp_) :=
-  fun req =>
-    let 'Request line fields obody := req in
-    [Atom $ line_to_string line;
-    to_sexp fields;
-    Atom $ body_to_string obody]%sexp.
-
-Definition get_tag (pkt : packetT id) : option field_value :=
-  if packet__payload pkt is inr res
-  then findField "ETag" $ response__fields res
-  else None.
-
-Definition has_tag (pkt : packetT id) : bool :=
-  if get_tag pkt is Some _ then true else false.
-
-Definition gen_request (ss : server_state exp) (tr : traceT)
-  : IO (http_request texp) :=
-  p <- gen_path ss;;
-  m <- io_choose [Method__GET; Method__PUT];;
-  let l : request_line :=
-      RequestLine m (RequestTarget__Origin p None) (Version 1 1) in
-  let host_field := @Field texp "Host" $ Texp__Const "localhost" in
-  let rs := filter (has_tag ∘ snd) tr in
-  t <- io_choose_ (pure Texp__Random) (map (Texp__Var ∘ fst) rs);;
-  tag_field <- (io_choose [[Field "If-Match" t];
-                         [Field "If-None-Match" t];
-                         []]);;
-  match m with
-  | Method__PUT =>
-    str0 <- gen_string;;
-    let str1 : string := p ++ ": " ++ str0 in
-    ret $ Request
-        l (host_field
-             ::(@Field texp "Content-Length" $ Texp__Const $
-                      to_string $ String.length str1)
-             ::tag_field)
-        (Some str1)
-  | Method__GET =>
-    ret $ Request l (host_field::tag_field) None
-  | _ => ret $ Request l [host_field] None
-  end%string.
+Definition gen_step (ss : server_state exp) (tr : traceT)
+  : IO (clientT * jexp) :=
+  pair (new_conn tr) <$> gen_request ss tr.
 
 Definition http_tester {E} `{Is__tE E} : itree E void :=
   tester $ observer $ compose_switch tcp http_smi.
-
-Instance Shrink__request : Shrink (http_request texp) := { shrink _ := [] }.
 
 Definition or_handler : nondetE ~> IO :=
   fun _ e => let 'Or := e in ORandom.bool tt.
@@ -111,32 +68,10 @@ Definition cleanup (s : conn_state) : IO unit :=
   fold_left (fun m fd => OUnix.close fd;; m)
             (map (fst ∘ snd) s) (ret tt).
 
-Definition recv_http_response : Monads.stateT conn_state IO (option (packetT id)) :=
-  recv_bytes;; findResponse.
+Module HttpTypes : AsyncTestSIG.
 
-Module HttpTypes : IShrinkSIG.
-
-Definition requestT            := http_request id.
-Definition responseT           := http_response id.
-
-Definition symreqT             := http_request texp.
-Definition Shrink__symreqT       := Shrink__request.
-Definition Serialize__symreqT    := @Serialize__request texp _.
-Definition instantiate_request := instantiate_request.
 Definition gen_state           := server_state exp.
-Definition gen_request         := gen_request.
-
-Definition connT               := connT.
-Definition Conn__Server          := Conn__Server.
-Definition Serialize__connT      := Serialize__connT.
-Definition Dec_Eq__connT         := Dec_Eq__connT.
-
-Definition packetT             := packetT id.
-Definition Packet              := @Packet id.
-Definition packet__payload       := @packet__payload id.
-Definition packet__src           := @packet__src id.
-Definition packet__dst           := @packet__dst id.
-Definition Serialize__packetT    := Serialize__packetT.
+Definition gen_step            := gen_step.
 
 Definition otherE              := nondetE +' logE.
 Definition other_handler       := other_handler.
@@ -149,11 +84,11 @@ Definition cleanup             := cleanup.
 
 Definition tester_state        := unit.
 Definition tester_init         := ret tt : IO tester_state.
-Definition tester              := fun (_ : unit) => http_tester.
+Definition tester              := fun (_ : tester_state) => http_tester.
 
 End HttpTypes.
 
-Module TestHTTP := IShrink HttpTypes.
+Module TestHTTP := AsyncTest HttpTypes.
 
 Definition test_http : IO bool :=
   TestHTTP.test.

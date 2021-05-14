@@ -12,7 +12,7 @@ From SimpleIO Require Export
      IO_Unix
      SimpleIO.
 From HTTP Require Export
-     Printer
+     Codec
      Tcp.
 Export
   FunctorNotation
@@ -43,18 +43,12 @@ Definition conn_of_fd (fd : file_descr)
   : conn_state -> option (clientT * (file_descr * string)) :=
   find (file_descr_eqb fd ∘ fst ∘ snd).
 
-Definition create_conn (s : conn_state)
-  : IO (conn_state * option (file_descr * clientT)) :=
-  let iaddr : inet_addr := inet_addr_loopback in
-  ofd <- try (fd <- socket PF_INET SOCK_STREAM int_zero;;
-             connect fd (ADDR_INET iaddr server_port);;
-             ret fd) (ret tt);;
-  match ofd with
-  | Some fd =>
-    let c := length s in
-    ret ((c, (fd, ""))::s, Some (fd, c))
-  | None => ret (s, None)
-  end.
+Definition create_conn (c : clientT) : Monads.stateT conn_state IO file_descr :=
+  fun s =>
+    let iaddr : inet_addr := inet_addr_loopback in
+    fd <- socket PF_INET SOCK_STREAM int_zero;;
+    connect fd (ADDR_INET iaddr server_port);;
+    ret ((c, (fd, ""))::s, fd).
 
 Notation BUFFER_SIZE := 2048.
 Definition SELECT_TIMEOUT := OFloat.Unsafe.of_string ".01".
@@ -88,31 +82,25 @@ Definition recv_bytes : Monads.stateT conn_state IO unit :=
 Instance Serialize__conn : Serialize (file_descr * string) :=
   to_sexp ∘ snd.
 
-Definition send_request (req : http_request id)
-  : Monads.stateT conn_state IO (option connT) :=
-  let send_bytes fdc s : IO (conn_state * option connT) :=
-        let (fd, c) := fdc : file_descr * clientT in
-        let str : string := request_to_string req in
-        buf <- OBytes.of_string str;;
-        let len : int := OBytes.length buf in
-        oc <- IO.fix_io
-          (fun send_rec o =>
-             sent <- send fd buf o (len - o)%int [];;
-             if sent <? int_zero
-             then close fd;;
-                  (* prerr_endline "Send byte failed";; *)
-                  ret None
-             else
-               if o + sent =? len
-               then
-                 (* prerr_endline ("================SENT================" *)
-                 (*                     ++ to_string c ++ CRLF ++ str);; *)
-                 ret (Some (Conn__User c))
-               else send_rec (o + sent))%int int_zero;;
-        ret (s, oc)
-  in
-    (fun s =>
-       '(s', ofdc) <- create_conn s;;
-       if ofdc is Some fdc
-       then send_bytes fdc s'
-       else ret (s', None)).
+Definition send_request (c : clientT) (req : IR)
+  : Monads.stateT conn_state IO unit :=
+  fun s =>
+    '(s', fd) <- match get c s with
+                 | Some (fd, _) => ret (s, fd)
+                 | _            => create_conn c s
+                 end;;
+    let str : string := jreq_to_string req in
+    buf <- OBytes.of_string str;;
+    let len : int := OBytes.length buf in
+    IO.fix_io
+      (fun send_rec o =>
+         sent <- send fd buf o (len - o)%int [];;
+         if sent <? int_zero
+         then close fd;; failwith "Send byte failed"
+         else
+           if o + sent =? len
+           then
+             (* prerr_endline ("================SENT================" *)
+             (*                     ++ to_string c ++ CRLF ++ str);; *)
+             ret (s', tt)
+           else send_rec (o + sent))%int int_zero.
