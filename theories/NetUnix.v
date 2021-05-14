@@ -43,12 +43,16 @@ Definition conn_of_fd (fd : file_descr)
   : conn_state -> option (clientT * (file_descr * string)) :=
   find (file_descr_eqb fd ∘ fst ∘ snd).
 
-Definition create_conn (c : clientT) : Monads.stateT conn_state IO file_descr :=
+Definition create_conn (c : clientT)
+  : Monads.stateT conn_state IO (option file_descr) :=
   fun s =>
     let iaddr : inet_addr := inet_addr_loopback in
-    fd <- socket PF_INET SOCK_STREAM int_zero;;
-    connect fd (ADDR_INET iaddr server_port);;
-    ret ((c, (fd, ""))::s, fd).
+    ofd <- try (fd <- socket PF_INET SOCK_STREAM int_zero;;
+               connect fd (ADDR_INET iaddr server_port);;
+               ret fd) (ret tt);;
+    let s' : conn_state :=
+        if ofd is Some fd then (c, (fd, ""))::s else s in
+    ret (s', ofd).
 
 Notation BUFFER_SIZE := 2048.
 Definition SELECT_TIMEOUT := OFloat.Unsafe.of_string ".01".
@@ -83,12 +87,13 @@ Instance Serialize__conn : Serialize (file_descr * string) :=
   to_sexp ∘ snd.
 
 Definition send_request (c : clientT) (req : IR)
-  : Monads.stateT conn_state IO unit :=
+  : Monads.stateT conn_state IO bool :=
   fun s =>
-    '(s', fd) <- match get c s with
-                 | Some (fd, _) => ret (s, fd)
-                 | _            => create_conn c s
-                 end;;
+    '(s', ofd) <- match get c s with
+                  | Some (fd, _) => ret (s, Some fd)
+                  | _            => create_conn c s
+                  end;;
+    if ofd is Some fd then
     let str : string := jreq_to_string req in
     buf <- OBytes.of_string str;;
     let len : int := OBytes.length buf in
@@ -96,11 +101,12 @@ Definition send_request (c : clientT) (req : IR)
       (fun send_rec o =>
          sent <- send fd buf o (len - o)%int [];;
          if sent <? int_zero
-         then close fd;; failwith "Send byte failed"
+         then close fd;; ret (s', false)
          else
            if o + sent =? len
            then
              (* prerr_endline ("================SENT================" *)
              (*                     ++ to_string c ++ CRLF ++ str);; *)
-             ret (s', tt)
-           else send_rec (o + sent))%int int_zero.
+             ret (s', true)
+           else send_rec (o + sent))%int int_zero
+    else ret (s', false).

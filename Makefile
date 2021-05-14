@@ -3,7 +3,7 @@ EXE?=TestHttp.native
 INSTALLDIR?=$(shell opam var bin)
 
 all: coq
-#	$(MAKE) -C extract
+	$(MAKE) -C extract
 
 coq: $(COQMAKEFILE)
 	@+$(MAKE) -f $^
@@ -13,7 +13,7 @@ test: all
 
 install: $(COQMAKEFILE)
 	@+$(MAKE) -f $^ $@
-#	install extract/$(EXE) $(INSTALLDIR)
+	install extract/$(EXE) $(INSTALLDIR)
 
 uninstall: $(COQMAKEFILE)
 	@+$(MAKE) -f $^ $@
