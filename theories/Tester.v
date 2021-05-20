@@ -256,7 +256,13 @@ CoFixpoint backtrack' {E R} `{Is__tE E} (others : list (itree stE R))
                   let p : packetT id := packet_req pkt in
                   Tau (backtrack' (match_observe (Tester__Send st)
                                                  p others) (k p))
-                | None => catch "Not ready to send"
+                | None =>
+                  match others with
+                  | [] =>
+                    Tau (backtrack' [] m)
+                  | other::others' =>
+                    Tau (backtrack' (others' ++ [m]) other)
+                  end
                 end
               end
       | Tester__Recv =>
