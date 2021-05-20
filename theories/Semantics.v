@@ -356,7 +356,7 @@ Definition unwrap_response (r : http_response exp) : http_response id :=
   let 'Response l f ob := r in
   Response l (map unwrap_field f) (unwrap <$> ob : option message_body).
 
-Definition server_port : N := 5000.
+Definition server_port : N := 80.
 
 Definition http_smi_body : itree E (server_state exp) :=
   match target_uri with

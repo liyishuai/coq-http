@@ -1,6 +1,5 @@
 From HTTP Require Import
-     Parser
-     Printer
+     Codec
      Semantics.
 
 Goal parse parseRequest ("GET /pub/WWW/TheProject.html HTTP/1.8"
@@ -42,5 +41,11 @@ Definition parse_print_response
 Definition parse_print_response_spec (r : http_response id) : Prop :=
   parse_print_response r = inr (r, "").
 
-Goal parse_print_response_spec (Response (status_line_of_code 405) [] None).
+Example response1 : http_response id :=
+  Response (status_line_of_code 405)
+           [Field "foo" "bar"] None.
+
+Goal parse_print_response_spec response1.
 Proof. reflexivity. Qed.
+
+Compute encode response1.

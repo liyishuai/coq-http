@@ -26,7 +26,8 @@ Instance JDecode__Method : JDecode request_method :=
 
 Definition decode__path : JDecode path := dpath "path".
 
-Definition decode__oquery : JDecode (option query) := dpath "query".
+Definition decode__oquery : JDecode (option query) := dpath' decode__option "query".
+Definition decode__obody  : JDecode (option message_body) := dpath' decode__option "body".
 
 Definition decode__origin : JDecode request_target :=
   fun j => liftA2 RequestTarget__Origin (decode__path j) (decode__oquery j).
@@ -35,8 +36,8 @@ Instance JDecode__Scheme : JDecode http_scheme :=
   fun j => dpath "scheme" j >>= dparse parseScheme.
 
 Instance JDecode__Authority : JDecode authority :=
-  fun j => liftA2 Authority (dpath "userinfo" j) (dpath "host" j) <*>
-               (dpath "port" j).
+  fun j => liftA2 Authority (dpath' decode__option "userinfo" j) (dpath "host" j)
+                <*> (dpath' decode__option "port" j).
 
 Instance JDecode__URI : JDecode absolute_uri :=
   fun j => liftA2 URI (decode j) (dpath "authroity" j) <*>
@@ -64,13 +65,14 @@ Instance JDecode__Fields : JDecode (list (field_line id)) :=
          else inl $ "Not an object: " ++ Printer.to_string j.
 
 Instance JDecode__Request : JDecode (http_request id) :=
-  fun j => liftA2 Request (decode j) (dpath "fields" j) <*> (dpath "body" j).
+  fun j => liftA2 Request (decode j) (dpath "fields" j) <*> decode__obody j.
 
 Instance JDecode__Status : JDecode status_line :=
-  fun j => liftA2 Status (decode j) (dpath "code" j) <*> (dpath "reason" j).
+  fun j => liftA2 Status (decode j) (dpath "code" j) <*>
+                (dpath' decode__option "reason" j).
 
 Instance JDecode__Response : JDecode (http_response id) :=
-  fun j => liftA2 Response (decode j) (dpath "fields" j) <*> (dpath "body" j).
+  fun j => liftA2 Response (decode j) (dpath "fields" j) <*> decode__obody j.
 
 Definition request_of_IR (j : json) : http_request id :=
   if decode j is inr req then req

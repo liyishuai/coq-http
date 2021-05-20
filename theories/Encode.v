@@ -16,14 +16,15 @@ Instance XEncode__Method : XEncode request_method :=
   jobj' (JSON__String ∘ method_to_string) "method".
 
 Definition xencode__path   : XEncode path           := jobj "path".
-Definition xencode__oquery : XEncode (option query) := jobj "query".
+Definition xencode__oquery : XEncode (option query) := jobj' encode__option "query".
 
 Instance XEncode__Scheme : XEncode http_scheme :=
   jobj' (JSON__String ∘ scheme_to_string) "scheme".
 
 Instance XEncode__Authority : XEncode authority :=
   fun a => let 'Authority u h p := a in
-        jobj "userinfo" u + jobj "host" h + jobj "port" p.
+         jobj' encode__option "userinfo" u + jobj "host" h +
+         jobj' encode__option "port" p.
 
 Instance XEncode__RequestTarget : XEncode request_target :=
   fun t =>
@@ -54,10 +55,14 @@ Open Scope json_scope.
 
 Instance Encode__Status : JEncode status_line :=
   fun s => let 'Status v c op := s in
-         encode v + Encode.jobj "code" c + Encode.jobj "reason" op.
+         encode__xencode v + Encode.jobj "code" c +
+         Encode.jobj' encode__option "reason" op.
+
+Definition encode__fields : JEncode (list (field_line id)) :=
+    Encode.jkv "fields" ∘ fold_right (or_json ∘ encode__xencode) (JSON__Object []).
 
 Instance Encode__Response : JEncode (http_response id) :=
   fun r => let 'Response l f ob := r in
-         encode l + Encode.jobj "fields" f + Encode.jobj "body" ob.
+         encode l + encode__fields f + Encode.jobj' encode__option "body" ob.
 
 Close Scope json_scope.
