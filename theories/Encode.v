@@ -58,11 +58,11 @@ Instance Encode__Status : JEncode status_line :=
          encode__xencode v + Encode.jobj "code" c +
          Encode.jobj' encode__option "reason" op.
 
-Definition encode__fields : JEncode (list (field_line id)) :=
+Instance XEncode__Fields : JEncode (list (field_line id)) :=
     Encode.jkv "fields" ∘ fold_right (or_json ∘ encode__xencode) (JSON__Object []).
 
 Instance Encode__Response : JEncode (http_response id) :=
   fun r => let 'Response l f ob := r in
-         encode l + encode__fields f + Encode.jobj' encode__option "body" ob.
+         encode l + encode f + Encode.jobj' encode__option "body" ob.
 
 Close Scope json_scope.

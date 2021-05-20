@@ -1,5 +1,6 @@
 From HTTP Require Import
      Codec
+     Gen
      Semantics.
 
 Goal parse parseRequest ("GET /pub/WWW/TheProject.html HTTP/1.8"
@@ -48,4 +49,15 @@ Example response1 : http_response id :=
 Goal parse_print_response_spec response1.
 Proof. reflexivity. Qed.
 
-Compute encode response1.
+Example line1 : request_line :=
+  RequestLine Method__GET (RequestTarget__Origin "index.html" None) (Version 1 1).
+
+Open Scope jexp_scope.
+
+Example xreq1 : jexp := xencode line1 + jkv "fields" host_localhost.
+(* Compute xreq1. *)
+
+Definition jreq1 : IR := jexp_to_IR_weak [] xreq1.
+(* Compute jreq1. *)
+
+(* Compute decode jreq1 : string + http_request id. *)

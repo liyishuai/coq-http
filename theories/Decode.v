@@ -17,7 +17,7 @@ Definition dparse {T} (pr : parser T) (s : string) : string + T :=
   end.
 
 Definition dpath' {T} (d : JDecode T) (s : string) (j : json) : string + T :=
-  decode__jpath (s -> this) j >>= d.
+  (decode__jpath (s -> this) j <|> inr JSON__Null) >>= d.
 
 Definition dpath {T} `{JDecode T} : string -> JDecode T := dpath' decode.
 
