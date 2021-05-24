@@ -2,24 +2,8 @@ From AsyncTest Require Export
      Common.
 From JSON Require Export
      Decode.
-From Coq Require Export
-     ssr.ssrfun.
 From HTTP Require Export
      Parser.
-Export
-  JpathNotations.
-Open Scope json_scope.
-
-Definition dparse {T} (pr : parser T) (s : string) : string + T :=
-  match parse pr s with
-  | inl os     => inl (odflt "Parser out of fuel" os)
-  | inr (t, _) => inr t
-  end.
-
-Definition dpath' {T} (d : JDecode T) (s : string) (j : json) : string + T :=
-  (decode__jpath (s -> this) j <|> inr JSON__Null) >>= d.
-
-Definition dpath {T} `{JDecode T} : string -> JDecode T := dpath' decode.
 
 Instance JDecode__Method : JDecode request_method :=
   fun j => dpath "method" j >>= dparse parseMethod.

@@ -3,7 +3,7 @@
 -Q app      App
 -arg -w -arg -solve_obligation_error
 
-ishrink/Common.v
+theories/Common.v
 ishrink/IShrink.v
 theories/Message.v
 theories/Printer.v
@@ -23,8 +23,9 @@ theories/Execute.v
 app/Form.v
 app/AppMessage.v
 app/Semantics.v
-# app/Tcp.v
-# app/Observe.v
-# app/Solver.v
+app/Tcp.v
+app/Observe.v
+app/Solver.v
+app/Decode.v
 # app/Tester.v
 # app/Execute.v

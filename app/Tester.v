@@ -1,12 +1,5 @@
 From App Require Export
      Solver.
-From IShrink Require Export
-     IShrink.
-
-Notation clientE := (@clientE (packetT (swap_request id) (swap_response id))
-                              (swap_state exp)).
-
-Notation tE := (failureE +' clientE +' nondetE +' logE).
 
 Notation swap_stE :=
   (stE (swap_request id) (swap_response id) (swap_state exp)).

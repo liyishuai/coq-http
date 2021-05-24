@@ -1,3 +1,5 @@
+From AsyncTest Require Export
+     AsyncTest.
 From HTTP Require Import
      Tcp.
 From App Require Export
@@ -109,13 +111,13 @@ CoFixpoint compose' {q r s E NE} `{Is__nE q r s E NE}
           | None => step__net st
           | Some (Packet s _ p, bi') =>
             match s, p with
-            | Conn__User c, inl r => Tau (compose' bi' bo net (k (c, r)))
+            | Conn__Client c, inl r => Tau (compose' bi' bo net (k (c, r)))
             | _, _ => Tau (compose' bi' bo net app) (* drop the packet *)
             end
           end
       | App__Send c r =>
         fun k =>
-          Tau (compose' bi (bo ++ [Packet Conn__Server (Conn__User c) (inr r)])
+          Tau (compose' bi (bo ++ [Packet Conn__Server (Conn__Client c) (inr r)])
                         net (k tt))
       end ka
     | (|e) => r <- trigger e;; Tau (compose' bi bo net (ka r))

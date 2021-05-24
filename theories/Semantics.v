@@ -8,8 +8,7 @@ From ITree Require Export
      ITree.
 From HTTP Require Export
      Printer
-     Parser.
-From IShrink Require Export
+     Parser
      Common.
 Export
   FunNotation
