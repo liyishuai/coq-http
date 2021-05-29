@@ -27,5 +27,6 @@ app/Tcp.v
 app/Observe.v
 app/Solver.v
 app/Decode.v
+app/Encode.v
 # app/Tester.v
 # app/Execute.v

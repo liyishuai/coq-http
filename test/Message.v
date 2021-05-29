@@ -43,8 +43,9 @@ Definition parse_print_response_spec (r : http_response id) : Prop :=
   parse_print_response r = inr (r, "").
 
 Example response1 : http_response id :=
-  Response (status_line_of_code 405)
-           [Field "foo" "bar"] None.
+  Response (Status (Version 1 1) 200 (Some "OK"))
+           [Field "ETag" "tag-foo";
+           Field "Content-Length" "11"] (Some "content-bar").
 
 Goal parse_print_response_spec response1.
 Proof. reflexivity. Qed.
@@ -61,3 +62,17 @@ Definition jreq1 : IR := jexp_to_IR_weak [] xreq1.
 (* Compute jreq1. *)
 
 (* Compute decode jreq1 : string + http_request id. *)
+
+From App Require Import
+     Encode.
+From JSON Require Import
+     Printer.
+
+Example jres1 : IR := encode response1.
+(* Compute jres1. *)
+
+Example response2 : swap_response id :=
+  Response__ListOrders [(233, (12, 100, 34, 500));
+                     (996, (56, 400, 78, 20))].
+
+(* Compute to_string (encode response2). *)

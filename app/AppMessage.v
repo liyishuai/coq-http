@@ -79,17 +79,24 @@ Definition swap_form (req : swap_request id) : form :=
     ("amount", string_of_N amount)]
   end.
 
-Definition swap_target (req : swap_request id) : request_target :=
+Definition swap_path {exp_} (req : swap_request exp_) : path :=
   match req with
-  | Request__Clean               => RequestTarget__Origin "clean"      None
-  | Request__ListOrders          => RequestTarget__Origin "listOrders" None
-  | Request__TakeOrder _ _       => RequestTarget__Origin "takeOrder"  None
-  | Request__MakeOrder _ _ _ _ _ => RequestTarget__Origin "makeOrder"  None
-  | Request__Deposit   _ _ _     => RequestTarget__Origin "deposit"    None
-  | Request__Withdraw  _ _ _     => RequestTarget__Origin "withdraw"   None
-  | Request__ListAccount _       => RequestTarget__Origin "listAccount"
-                             (Some (form_to_string (swap_form req)))
+  | Request__Clean               => "clean"
+  | Request__ListOrders          => "listOrders"
+  | Request__TakeOrder _ _       => "takeOrder"
+  | Request__MakeOrder _ _ _ _ _ => "makeOrder"
+  | Request__Deposit   _ _ _     => "deposit"
+  | Request__Withdraw  _ _ _     => "withdraw"
+  | Request__ListAccount _       => "listAccount"
   end.
+
+Definition swap_target (req : swap_request id) : request_target :=
+  RequestTarget__Origin
+    (swap_path req)
+    (match req with
+     | Request__ListAccount _ => Some (form_to_string (swap_form req))
+     | _                    => None
+     end).
 
 Definition swap_body (req : swap_request id) : option message_body :=
   match req with
@@ -146,15 +153,29 @@ Variant swap_response {exp_} :=
 | Response__Order       (o : orderT exp_).
 Arguments swap_response : clear implicits.
 
+Definition swap_code {exp_} (r : swap_response exp_) : Z :=
+  match r with
+  | Response__ListAccount _
+  | Response__ListOrders _
+  | Response__Account _
+  | Response__Order _             => 200
+  | Response__NoContent           => 204
+  | Response__BadRequest          => 400
+  | Response__InsufficientFund    => 402
+  | Response__NotFound            => 404
+  | Response__InternalServerError => 500
+  end.
+
 Instance Serialize__response {exp_} `{Serialize (exp_ N)}
   : Serialize (swap_response exp_) :=
   fun r =>
-    match r with
-    | Response__BadRequest       => [Atom 400; Atom "Bad Request"]
-    | Response__InsufficientFund => [Atom 402; Atom "Payment Required"]
-    | Response__NotFound         => [Atom 404; Atom "Not Found"]
-    | Response__NoContent        => [Atom 204; Atom "No Content"]
-    | Response__InternalServerError => [Atom 500; Atom "Internal Server Error"]
-    | Response__ListAccount x | Response__ListOrders x
-    | Response__Account     x | Response__Order      x => [Atom 200; to_sexp x]
-    end%sexp.
+    [Atom (swap_code r);
+     match r with
+     | Response__BadRequest       => Atom "Bad Request"
+     | Response__InsufficientFund => Atom "Payment Required"
+     | Response__NotFound         => Atom "Not Found"
+     | Response__NoContent        => Atom "No Content"
+     | Response__InternalServerError => Atom "Internal Server Error"
+     | Response__ListAccount x | Response__ListOrders x
+     | Response__Account     x | Response__Order      x => to_sexp x
+     end]%sexp.

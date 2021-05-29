@@ -37,7 +37,7 @@ Instance JDecode__Order : JDecode (orderT id) :=
     oid <- dpath "ID"         j;;
     bid <- dpath "BuyerID"    j;;
     bam <- dpath "BuyAmount"  j;;
-    sid <- dpath "BuyerID"    j;;
+    sid <- dpath "SellerID"    j;;
     sam <- dpath "SellAmount" j;;
     ret (oid, (bid, bam, sid, sam)).
 
