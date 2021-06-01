@@ -55,7 +55,7 @@ Definition gen_line (ss : server_state exp) : IO request_line :=
 
 Definition find_etag (tr : traceT) : IO jexp :=
   io_choose_ (ret $ Jexp__Object []) $
-             findpath ("fields" -> "ETag" -> this) id tr.
+             findpath (this@"fields"@"ETag") id tr.
 
 Definition gen_condition (tr : traceT) : IO jexp :=
   condition <- io_choose ["If-Match"; "If-None-Match"];;

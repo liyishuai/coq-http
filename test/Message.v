@@ -53,15 +53,39 @@ Proof. reflexivity. Qed.
 Example line1 : request_line :=
   RequestLine Method__GET (RequestTarget__Origin "index.html" None) (Version 1 1).
 
+Import
+  JpathNotations.
+Open Scope nat_scope.
+Open Scope json_scope.
 Open Scope jexp_scope.
 
-Example xreq1 : jexp := xencode line1 + jkv "fields" host_localhost.
+Example xreq1 : jexp :=
+  xencode line1 +
+  jkv "fields"
+      (host_localhost +
+       jkv "If-Match" (Jexp__Ref 30 (this @ "fields" @ "ETag") id)).
+
 (* Compute xreq1. *)
 
 Definition jreq1 : IR := jexp_to_IR_weak [] xreq1.
 (* Compute jreq1. *)
 
 (* Compute decode jreq1 : string + http_request id. *)
+
+Coercion JSON__String : string >-> json.
+Coercion JSON__Number : Z >-> json.
+Coercion Jexp__Const : json >-> jexp.
+
+Notation const := Jexp__Const.
+Notation ref   := Jexp__Ref.
+Notation object := Jexp__Object.
+
+Example xreq2' : jexp :=
+  jobj "method" "takeOrder" +
+  jobj "user" 2 +
+  jkv "order" (Jexp__Ref 30 (this @ "orders" # 2 @ "ID") id).
+
+Compute xreq2'.
 
 From App Require Import
      Encode.
