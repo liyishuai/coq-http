@@ -180,11 +180,13 @@ Definition http_smi_put_body'
   fun st =>
   match om with
   | Some m =>
-    match get p st with
-    | Some (Some _) => no_content
-    | Some None     => created
-    | None          => or created no_content
-    end;;
+    (* match get p st with *)
+    (*   or  *)
+    (* | Some (Some _) => no_content *)
+    (* | Some None     => created *)
+    (* | None          => or created no_content *)
+    (* end;; *)
+    or created no_content;;
     ot <- Some <$> embed (@Sym__NewETag exp);;
     ret (update p (Some (ResourceState (Exp__Const m) ot)) st, tt)
   | None => bad_request;; ret (st, tt)

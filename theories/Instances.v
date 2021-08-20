@@ -1,5 +1,5 @@
 From QuickChick Require Import
-     Decidability.
+     QuickChick.
 From HTTP Require Import
      Message.
 
@@ -14,3 +14,6 @@ Proof. dec_eq. Defined.
 
 Instance Dec_Eq__uri : Dec_Eq absolute_uri.
 Proof. dec_eq. Defined.
+
+Instance Shrink__Version : Shrink http_version :=
+  { shrink _ := [] }.

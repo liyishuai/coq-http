@@ -10,6 +10,11 @@ Export
   JpathNotations.
 Open Scope json_scope.
 
+Definition tee {A} `{Serialize A} (io: IO A) : IO A :=
+  a <- io;;
+  prerr_endline (to_string a);;
+  ret a.
+
 Definition io_choose_ {A} (default : IO A) (l : list A) : IO A :=
   match l with
   | [] => default
@@ -54,8 +59,8 @@ Definition gen_line (ss : server_state exp) : IO request_line :=
   ret (RequestLine m (RequestTarget__Origin p None) (Version 1 1)).
 
 Definition find_etag (tr : traceT) : IO jexp :=
-  io_choose_ (ret $ Jexp__Object []) $
-             findpath (this@"fields"@"ETag") id tr.
+  tags <- io_or (ret $ findpath (this@"fields"@"ETag") id tr) (ret []);;
+  io_choose_ (ret $ Jexp__Object []) tags.
 
 Definition gen_condition (tr : traceT) : IO jexp :=
   condition <- io_choose ["If-Match"; "If-None-Match"];;

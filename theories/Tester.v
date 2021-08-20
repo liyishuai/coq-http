@@ -144,7 +144,7 @@ Definition instantiate_unify {E A} `{Is__stE E} (e : unifyE A)
       | inr s1  =>
         (* embed Log ("Unification successful: " ++ to_string s1);; *)
         Ret (s1, ps, tt)
-      | inl err => throw $ "Unify If-Match failed: " ++ err
+      | inl err => throw $ "Unify ETag failed: " ++ err
       end
     end.
 
@@ -230,6 +230,7 @@ CoFixpoint backtrack' {E R} `{Is__tE E} (others : list (itree stE R))
     | (|de|) =>
       match de in decideE Y return (Y -> _) -> _ with
       | Decide => fun k => b <- trigger Or;;
+                        (* embed Log (to_string b);; *)
                        Tau (backtrack' (k (negb b) :: others) (k b))
       end k
     | (||le|) =>

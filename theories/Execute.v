@@ -28,7 +28,7 @@ Fixpoint findResponse (s : conn_state)
       (* curr <- OFloat.to_string <$> OUnix.gettimeofday;; *)
       (* prerr_endline curr;; *)
       (* prerr_endline ("==============RECEIVED==============" *)
-      (*                  ++ to_string c ++ CRLF ++ response_to_string r);; *)
+      (*                  ++ to_string c ++ CRLF ++ to_string r);; *)
       ret ((c, (f, str')) :: t, Some (Packet Conn__Server (Conn__Client c) r))
     end
   end.
