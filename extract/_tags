@@ -1,1 +1,1 @@
-true: package(unix)
+true: package(unix,zarith), warn(-D-20)

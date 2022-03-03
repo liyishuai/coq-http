@@ -21,6 +21,7 @@ Arguments packet__src     {_}.
 Arguments packet__dst     {_}.
 Arguments packet__payload {_}.
 
+#[global]
 Instance Serialize__payloadT : Serialize (payloadT id) :=
   fun p =>
     match p with
@@ -28,6 +29,7 @@ Instance Serialize__payloadT : Serialize (payloadT id) :=
     | inr (Response status _ _) => Atom $ status_to_string status
     end.
 
+#[global]
 Instance Serialize__packetT : Serialize (packetT id) :=
   fun pkt =>
     let 'Packet s d p := pkt in
@@ -90,6 +92,7 @@ Variant netE : Type -> Type :=
 
 Class Is__nE E `{netE -< E} `{nondetE -< E} `{logE -< E} `{symE exp -< E}.
 Notation nE := (netE +' nondetE +' logE +' symE exp).
+#[global]
 Instance nE_Is__nE : Is__nE nE. Defined.
 
 Definition packet_to_server {exp_} (p : packetT exp_) : bool :=

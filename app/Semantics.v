@@ -30,6 +30,7 @@ Fixpoint exp_to_sexp {T} (e : exp T) : sexp :=
   | Exp__Nth x l => [Atom "Nth"; exp_to_sexp x; List (map exp_to_sexp l)]
   end%sexp.
 
+#[global]
 Instance Serialzie__exp {T} : Serialize (exp T) := exp_to_sexp.
 
 Variant symE : Type -> Type :=
@@ -38,6 +39,7 @@ Variant symE : Type -> Type :=
 
 Class  Is__smE q r s E `{appE q r s -< E} `{symE -< E}.
 Notation smE q r s := (appE q r s +' symE).
+#[global]
 Instance smE_Is__smE {q r s} : Is__smE q r s (smE q r s). Defined.
 
 Definition server_smi {q r s E} `{Is__smE q r s E}

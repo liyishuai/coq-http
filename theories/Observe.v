@@ -30,6 +30,7 @@ Notation failureE := (exceptE string).
 Class Is__oE E `{failureE -< E}
       `{decideE -< E} `{unifyE -< E} `{logE -< E} `{observeE -< E}.
 Notation oE := (failureE +' decideE +' unifyE +' logE +' observeE).
+#[global]
 Instance oE_Is__oE : Is__oE oE. Defined.
 
 (* TODO: distinguish proxy from clients *)

@@ -2,6 +2,8 @@
 -Q ishrink  IShrink
 -Q app      App
 -arg -w -arg -solve_obligation_error
+-arg -w -arg -notation-overridden
+-arg -w -arg -masking-absolute-name
 
 theories/Common.v
 ishrink/IShrink.v
@@ -22,10 +24,10 @@ theories/Tester.v
 theories/Execute.v
 app/Form.v
 app/AppMessage.v
-app/Semantics.v
-app/Tcp.v
-app/Observe.v
-app/Solver.v
+# app/Semantics.v
+# app/Tcp.v
+# app/Observe.v
+# app/Solver.v
 app/Decode.v
 app/Encode.v
 # app/Tester.v

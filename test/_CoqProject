@@ -1,5 +1,7 @@
 -Q ../theories HTTP
 -Q ../app App
+-arg -w -arg -notation-overridden
+-arg -w -arg -masking-absolute-name
 
 Message.v
 ETag.v

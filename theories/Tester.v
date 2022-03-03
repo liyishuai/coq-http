@@ -9,6 +9,7 @@ From HTTP Require Export
 Open Scope N_scope.
 Open Scope string_scope.
 
+#[global]
 Instance Serialize__field {exp_} `{Serialize (exp_ field_value)}
   : Serialize (field_line exp_) :=
   fun f => let 'Field n v := f in
@@ -89,6 +90,7 @@ Variant testerE : Type -> Type :=
 Class Is__stE E `{failureE -< E}
       `{decideE -< E} `{logE -< E} `{testerE -< E}.
 Notation stE := (failureE +' decideE +' logE +' testerE).
+#[global]
 Instance stE_Is__stE : Is__stE stE. Defined.
 
 Definition instantiate_unify {E A} `{Is__stE E} (e : unifyE A)
@@ -210,6 +212,7 @@ Definition packet_res (p : Trace.packetT) : packetT id :=
 Class Is__tE E`{failureE -< E} `{@clientE (server_state exp) -< E}
       `{nondetE -< E} `{logE -< E}.
 Notation tE := (failureE +' @clientE (server_state exp) +' nondetE +' logE).
+#[global]
 Instance tE_Is__tE : Is__tE tE. Defined.
 
 CoFixpoint backtrack' {E R} `{Is__tE E} (others : list (itree stE R))

@@ -7,6 +7,7 @@ From App Require Export
 Export
   ApplicativeNotation.
 
+#[global]
 Instance JDecode__Request : JDecode (swap_request id) :=
   fun j =>
     m <- dpath "method" j;;
@@ -24,6 +25,7 @@ Instance JDecode__Request : JDecode (swap_request id) :=
     | _             => ret Request__ListOrders
     end.
 
+#[global]
 Instance JDecode__Account : JDecode (accountT id) :=
   fun j =>
     aid <- dpath "ID"          j;;
@@ -32,6 +34,7 @@ Instance JDecode__Account : JDecode (accountT id) :=
     amt <- dpath "Amount"      j;;
     ret (aid, (uid, tcr, amt)).
 
+#[global]
 Instance JDecode__Order : JDecode (orderT id) :=
   fun j =>
     oid <- dpath "ID"         j;;
@@ -41,6 +44,7 @@ Instance JDecode__Order : JDecode (orderT id) :=
     sam <- dpath "SellAmount" j;;
     ret (oid, (bid, bam, sid, sam)).
 
+#[global]
 Instance JDecode__Response : JDecode (swap_response id) :=
   fun j =>
     c <- dpath "code" j;;

@@ -2,6 +2,9 @@
 -Q ../ishrink IShrink
 -Q ../app App
 -Q . Extract
+-arg -w -arg -notation-overridden
+-arg -w -arg -extraction-reserved-identifier
+-arg -w -arg -masking-absolute-name
 
 IO_Test.v
 TestSwap.v

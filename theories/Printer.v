@@ -55,6 +55,7 @@ Definition authority_to_string (s : authority) : string :=
   authority__host s ++
   port_to_string (authority__port s).
 
+#[global]
 Instance Serialize__authority : Serialize authority :=
   Atom ∘ authority_to_string.
 

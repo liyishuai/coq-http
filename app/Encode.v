@@ -9,6 +9,7 @@ Import
   XNotations.
 Open Scope jexp_scope.
 
+#[global]
 Instance XEncode__Request : XEncode (swap_request id) :=
   fun r =>
     jobj "method" (swap_path r) +
@@ -34,6 +35,7 @@ Import
   JNotations.
 Open Scope json_scope.
 
+#[global]
 Instance JEncode__Account : JEncode (accountT id) :=
   fun a => let '(aid, (uid, tkr, amt)) := a in
          jobj "ID"          aid +
@@ -41,6 +43,7 @@ Instance JEncode__Account : JEncode (accountT id) :=
          jobj "AssetTicker" tkr +
          jobj "Amount"      amt.
 
+#[global]
 Instance JEncode__Order : JEncode (orderT id) :=
   fun o => let '(oid, (bid, bam, sid, sam)) := o in
          jobj "ID"         oid +
@@ -49,6 +52,7 @@ Instance JEncode__Order : JEncode (orderT id) :=
          jobj "SellerID"   sid +
          jobj "SellAmount" sam.
 
+#[global]
 Instance JEncode__Response : JEncode (swap_response id) :=
   fun r =>
     jobj "code" (swap_code r) +

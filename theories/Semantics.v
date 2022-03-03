@@ -68,9 +68,11 @@ Fixpoint exp_to_sexp {T} (e : exp T) : sexp :=
     | Exp__Match f fx w => [Atom "Match tag"; Atom f; exp_to_sexp fx; to_sexp w]
     end%sexp.
 
+#[global]
 Instance Serialize__exp {T} : Serialize (exp T) :=
   exp_to_sexp.
 
+#[global]
 Instance Serialize__resource : Serialize (resource_state exp) :=
   fun r =>
     let 'ResourceState b e := r in
@@ -94,6 +96,7 @@ Arguments symE : clear implicits.
 
 Class Is__smE E `{appE exp -< E} `{nondetE -< E} `{logE -< E} `{symE exp -< E}.
 Notation smE := (appE exp +' nondetE +' logE +' symE exp).
+#[global]
 Instance smE_Is__smE : Is__smE smE. Defined.
 
 Definition iter_forever {E : Type -> Type} {A : Type} (f : A -> itree E A)

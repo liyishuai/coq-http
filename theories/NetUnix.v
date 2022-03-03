@@ -83,6 +83,7 @@ Definition recv_bytes : Monads.stateT conn_state IO unit :=
           '(s', b) <- recv_bytes' s;;
           if b : bool then recv_rec s' else ret (s', tt))).
 
+#[global]
 Instance Serialize__conn : Serialize (file_descr * string) :=
   to_sexp ∘ snd.
 

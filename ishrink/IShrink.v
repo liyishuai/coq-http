@@ -25,7 +25,7 @@ Variant clientE {packetT gen_state : Type} : Type -> Type :=
 
 Definition labelT := nat.
 Definition scriptT {symreqT : Type} := list (labelT * symreqT).
-Definition traceT  {packetT : Type} := list (labelT * packetT).
+Definition traceT   packetT         := list (labelT * packetT).
 
 Module Type IShrinkSIG.
 
@@ -34,13 +34,16 @@ Notation payloadT := (requestT + responseT)%type.
 
 Parameter connT      : Type.
 Parameter Conn__Server : connT.
+#[global]
 Declare Instance Serialize__connT : Serialize connT.
+#[global]
 Declare Instance Dec_Eq__connT : Dec_Eq connT.
 
 Parameter packetT : Type.
 Parameter Packet : connT -> connT -> payloadT -> packetT.
 Parameter packet__payload       : packetT -> payloadT.
 Parameter packet__src packet__dst : packetT -> connT.
+#[global]
 Declare Instance Serialize__packetT : Serialize packetT.
 
 (** Model state exposed for request generation purposes. *)
@@ -62,14 +65,13 @@ Parameter cleanup : conn_state -> IO unit.
 
 (** Symbolic request type, for scripting purposes. *)
 Parameter symreqT : Type.
+#[global]
 Declare Instance Shrink__symreqT    : Shrink symreqT.
+#[global]
 Declare Instance Serialize__symreqT : Serialize symreqT.
 
-Notation scriptT := (@scriptT symreqT).
-Notation traceT  := (@traceT packetT).
-
-Parameter instantiate_request : traceT -> symreqT -> requestT.
-Parameter gen_request : gen_state -> traceT -> IO symreqT.
+Parameter instantiate_request : traceT packetT -> symreqT -> requestT.
+Parameter gen_request : gen_state -> traceT packetT -> IO symreqT.
 
 Parameter tester_state : Type.
 Parameter tester_init  : IO tester_state.
@@ -86,7 +88,7 @@ Fixpoint repeat_list {A} (n : nat) (l : list A) : list A :=
   | S n' => l ++ repeat_list n' l
   end.
 
-Definition shrink_execute' (exec : scriptT -> IO (bool * traceT))
+Definition shrink_execute' (exec : scriptT -> IO (bool * traceT packetT))
            (init : scriptT) : IO (option scriptT) :=
   prerr_endline "===== initial script =====";;
   prerr_endline (to_string init);;
@@ -108,8 +110,8 @@ Definition shrink_execute' (exec : scriptT -> IO (bool * traceT))
               ret (Some sc)
        end) (repeat_list 20 $ shrink init).
 
-Definition shrink_execute (first_exec : IO (bool * (scriptT * traceT)))
-           (then_exec : scriptT -> IO (bool * traceT)) : IO bool :=
+Definition shrink_execute (first_exec : IO (bool * (scriptT * traceT packetT)))
+           (then_exec : scriptT -> IO (bool * traceT packetT)) : IO bool :=
   '(b, (sc, tr)) <- first_exec;;
   if b : bool
   then ret true
@@ -119,8 +121,8 @@ Definition shrink_execute (first_exec : IO (bool * (scriptT * traceT)))
        ret false.
 
 Fixpoint execute' {R} (fuel : nat) (s : conn_state)
-         (oscript : option scriptT) (acc : scriptT * traceT) (m : itree tE R)
-  : IO (bool * conn_state * (scriptT * traceT)) :=
+         (oscript : option scriptT) (acc : scriptT * traceT packetT) (m : itree tE R)
+  : IO (bool * conn_state * (scriptT * traceT packetT)) :=
   let (script0, trace0) := acc in
   match fuel with
   | O => ret (true, s, acc)
@@ -182,13 +184,13 @@ Fixpoint execute' {R} (fuel : nat) (s : conn_state)
     end
   end.
 
+Set Warnings "-abstract-large-number".
 Definition execute {R} (m : tester_state -> itree tE R) (oscript : option scriptT)
-  : IO (bool * (scriptT * traceT)) :=
+  : IO (bool * (scriptT * traceT packetT)) :=
   tester_init_state <- tester_init;;
   '(b, s, t') <- execute' 1000000 init_state oscript ([], []) (m tester_init_state);;
   cleanup s;;
   ret (b, t').
-
 (* end hide *)
 
 (** ** From client ITree to shrink-testing program *)

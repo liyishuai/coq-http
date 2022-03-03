@@ -5,6 +5,7 @@ Variant traceT :=
   Trace__In  : packetT id -> traceT
 | Trace__Out : packetT id -> traceT.
 
+#[global]
 Instance Serialize__traceT : Serialize traceT :=
   fun t =>
     match t with

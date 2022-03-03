@@ -12,19 +12,23 @@ Export
 
 Open Scope jexp_scope.
 
+#[global]
 Instance XEncode__Method : XEncode request_method :=
   jobj' (JSON__String ∘ method_to_string) "method".
 
 Definition xencode__path   : XEncode path           := jobj "path".
 Definition xencode__oquery : XEncode (option query) := jobj "query".
 
+#[global]
 Instance XEncode__Scheme : XEncode http_scheme :=
   jobj' (JSON__String ∘ scheme_to_string) "scheme".
 
+#[global]
 Instance XEncode__Authority : XEncode authority :=
   fun a => let 'Authority u h p := a in
          jobj "userinfo" u + jobj "host" h + jobj "port" p.
 
+#[global]
 Instance XEncode__RequestTarget : XEncode request_target :=
   fun t =>
     match t with
@@ -36,14 +40,17 @@ Instance XEncode__RequestTarget : XEncode request_target :=
     | RequestTarget__Asterisk => Jexp__Object []
     end.
 
+#[global]
 Instance XEncode__Version : XEncode http_version :=
   fun v => let 'Version maj min := v in
         jkv "version" $ jobj "major" maj + jobj "minor" min.
 
+#[global]
 Instance XEncode__RequestLine : XEncode request_line :=
   fun l => let 'RequestLine m t v := l in
         xencode m + jkv "target" (xencode t) + xencode v.
 
+#[global]
 Instance XEncode__Field : XEncode (field_line id) :=
   fun f => let 'Field k v := f in
          jobj k v.
@@ -52,13 +59,16 @@ Close Scope jexp_scope.
 
 Open Scope json_scope.
 
+#[global]
 Instance Encode__Status : JEncode status_line :=
   fun s => let 'Status v c op := s in
          encode__xencode v + Encode.jobj "code" c + Encode.jobj "reason" op.
 
+#[global]
 Instance XEncode__Fields : JEncode (list (field_line id)) :=
     Encode.jkv "fields" ∘ fold_right (or_json ∘ encode__xencode) (JSON__Object []).
 
+#[global]
 Instance Encode__Response : JEncode (http_response id) :=
   fun r => let 'Response l f ob := r in
          encode l + encode f + Encode.jobj "body" ob.

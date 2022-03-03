@@ -47,6 +47,7 @@ Variant swap_request {exp_} :=
 | Request__Withdraw  (uid : user_id) (ticker : assetT) (amount : exp_ amountT).
 Arguments swap_request : clear implicits.
 
+#[global]
 Instance Dec_Eq__request : Dec_Eq (swap_request id).
 Proof. dec_eq. Defined.
 
@@ -121,6 +122,7 @@ Definition encode_request (req : swap_request id) : http_request id :=
   in
   Request line headers obody.
 
+#[global]
 Instance Serialize__request {exp_} `{Serialize (exp_ N)}
   : Serialize (swap_request exp_) :=
   fun req => match req with
@@ -166,6 +168,7 @@ Definition swap_code {exp_} (r : swap_response exp_) : Z :=
   | Response__InternalServerError => 500
   end.
 
+#[global]
 Instance Serialize__response {exp_} `{Serialize (exp_ N)}
   : Serialize (swap_response exp_) :=
   fun r =>
