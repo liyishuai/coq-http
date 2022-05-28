@@ -10,9 +10,9 @@ jobs:
         type: string
     docker:
     - image: <<parameters.coq>>
-    resource_class: medium
+    resource_class: large
     environment:
-      OPAMJOBS: 2
+      OPAMJOBS: 4
       OPAMVERBOSE: 1
       OPAMYES: true
       TERM: xterm
@@ -42,9 +42,6 @@ workflows:
   version: 2
   test:
     jobs:
-    - build:
-        name: "Coq 8.13-ocaml-4.11-flambda"
-        coq: "coqorg/coq:8.13-ocaml-4.11-flambda"
     - build:
         name: "Coq 8.14-ocaml-4.12-flambda"
         coq: "coqorg/coq:8.14-ocaml-4.12-flambda"

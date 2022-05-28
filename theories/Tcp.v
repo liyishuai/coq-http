@@ -96,12 +96,12 @@ Notation nE := (netE +' nondetE +' logE +' symE exp).
 Instance nE_Is__nE : Is__nE nE. Defined.
 
 Definition packet_to_server {exp_} (p : packetT exp_) : bool :=
-  match packet__dst p with
+  match p.(packet__dst) with
   | Conn__Server => true
   | Conn__Client _ => false
   end.
 Definition packet_from_user {exp_} (p : packetT exp_) : bool :=
-  match packet__src p with
+  match p.(packet__src) with
   | Conn__Client _ => true
   | Conn__Server => false
   end.

@@ -23,7 +23,7 @@ HTTP specification in Coq, testable and verifiable
   - Azzam Althagafi
   - Benjamin C. Pierce
 - License: [Mozilla Public License 2.0](LICENSE)
-- Compatible Coq versions: 8.13 or later
+- Compatible Coq versions: 8.14 or later
 - Additional dependencies:
   - [OCamlbuild](https://github.com/ocaml/ocamlbuild)
   - [QuickChick](https://github.com/QuickChick/QuickChick/)

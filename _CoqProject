@@ -4,6 +4,7 @@
 -arg -w -arg -solve_obligation_error
 -arg -w -arg -notation-overridden
 -arg -w -arg -masking-absolute-name
+-native-compiler no
 
 theories/Common.v
 ishrink/IShrink.v

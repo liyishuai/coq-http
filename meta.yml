@@ -45,10 +45,9 @@ date: 2021-01-14
 namespace: HTTP
 opam-file-maintainer: 'Yishuai Li <yishuai@cis.upenn.edu>'
 supported_coq_versions:
-  text: 8.13 or later
-  opam: '{ >= "8.13~" }'
+  text: 8.14 or later
+  opam: '{ >= "8.14~" }'
 tested_coq_opam_versions:
-  - version: '8.13-ocaml-4.11-flambda'
   - version: '8.14-ocaml-4.12-flambda'
   - version: '8.15-ocaml-4.12-flambda'
   - version: 'dev-ocaml-4.12-flambda'
