@@ -19,9 +19,9 @@ run-test: [make "-j%{jobs}%" "test"]
 install: [make "install" "INSTALLDIR=%{bin}%"]
 depends: [
   "coq" { >= "8.14~" }
-  "ocamlbuild" { >= "0.14.0" }
-  "coq-quickchick" 
-  "coq-async-test" 
+  "ocamlbuild" { >= "0.14.1" }
+  "coq-quickchick" { >= "1.6.3" }
+  "coq-async-test" { >= "0.1.0" }
 ]
 
 tags: [
@@ -30,7 +30,7 @@ tags: [
   "keyword:co-induction"
   "keyword:extraction"
   "keyword:reactive systems"
-  "date:2021-01-14"
+  "date:2022-05-30"
   "logpath:HTTP"
 ]
 authors: [

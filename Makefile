@@ -33,3 +33,7 @@ force _CoqProject Makefile: ;
 	@+$(MAKE) -f $< $@
 
 .PHONY: all clean force test
+
+publish%:
+	opam publish --packages-directory=released/packages \
+		--repo=coq/opam-coq-archive --tag=v$* -v $* liyishuai/coq-http

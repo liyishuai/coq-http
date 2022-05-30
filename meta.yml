@@ -24,13 +24,15 @@ dependencies:
   - description: '[OCamlbuild](https://github.com/ocaml/ocamlbuild)'
     opam:
       name: ocamlbuild
-      version: '{ >= "0.14.0" }'
+      version: '{ >= "0.14.1" }'
   - description: '[QuickChick](https://github.com/QuickChick/QuickChick/)'
     opam:
       name: coq-quickchick
+      version: '{ >= "1.6.3" }'
   - description: '[AsyncTest](https://github.com/liyishuai/coq-async-test)'
     opam:
       name: coq-async-test
+      version: '{ >= "0.1.0" }'
 test_target: test
 install_flag: INSTALLDIR=%{bin}%
 categories:
@@ -42,7 +44,7 @@ keywords:
   - name: co-induction
   - name: extraction
   - name: reactive systems
-date: 2021-01-14
+date: 2022-05-30
 namespace: HTTP
 opam-file-maintainer: 'Yishuai Li <yishuai@cis.upenn.edu>'
 supported_coq_versions:
