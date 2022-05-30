@@ -24,7 +24,6 @@ jobs:
     - run:
         name: Install dependencies
         command: |
-          opam repo -a --set-default add coq-extra-dev https://coq.inria.fr/opam/extra-dev
           opam update
           opam install --deps-only .
     - run:

@@ -30,11 +30,9 @@ HTTP specification in Coq, testable and verifiable
   - [AsyncTest](https://github.com/liyishuai/coq-async-test)
 - Coq namespace: `HTTP`
 - Related publication(s):
-  - [From C to Interaction Trees:
-    Specifying, Verifying, and Testing a Networked Server
-](https://doi.org/10.1145/3293880.3294106) doi:[10.1145/3293880.3294106](https://doi.org/10.1145/3293880.3294106)
-  - [Interaction Trees: Representing Recursive and Impure Programs in Coq
-](https://doi.org/10.1145/3371119) doi:[10.1145/3371119](https://doi.org/10.1145/3371119)
+  - [From C to Interaction Trees: Specifying, Verifying, and Testing a Networked Server](https://doi.org/10.1145/3293880.3294106) doi:[10.1145/3293880.3294106](https://doi.org/10.1145/3293880.3294106)
+  - [Model-Based Testing of Networked Applications](https://doi.org/10.1145/3460319.3464798) doi:[10.1145/3460319.3464798](https://doi.org/10.1145/3460319.3464798)
+  - [Verifying an HTTP Key-Value Server with Interaction Trees and VST](https://drops.dagstuhl.de/opus/volltexte/2021/13927) doi:[10.4230/LIPIcs.ITP.2021.32](https://doi.org/10.4230/LIPIcs.ITP.2021.32)
 
 ## Building and installation instructions
 
