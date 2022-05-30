@@ -4,7 +4,6 @@ shortname: coq-http
 opam_name: coq-http
 organization: liyishuai
 circleci: true
-ci_extra_dev: true
 synopsis: HTTP in Coq
 description: HTTP specification in Coq, testable and verifiable
 authors:
@@ -43,7 +42,9 @@ dependencies:
 test_target: test
 install_flag: INSTALLDIR=%{bin}%
 categories:
-  - name: Computer Science/Concurrent Systems and Protocols/Correctness of specific protocols
+  - name: >-
+      Computer Science/Concurrent Systems and Protocols/Correctness of specific
+      protocols
   - name: Miscellaneous/Extracted Programs/Decision procedures
 keywords:
   - name: co-induction
@@ -61,12 +62,14 @@ tested_coq_opam_versions:
   - version: '8.15-ocaml-4.12-flambda'
   - version: 'dev-ocaml-4.12-flambda'
 publications:
-  - pub_title: >
+  - pub_title: >-
       From C to Interaction Trees:
-          Specifying, Verifying, and Testing a Networked Server
+      Specifying, Verifying, and Testing a Networked Server
     pub_url: https://doi.org/10.1145/3293880.3294106
     pub_doi: 10.1145/3293880.3294106
-  - pub_title: >
-      Interaction Trees: Representing Recursive and Impure Programs in Coq
-    pub_url: https://doi.org/10.1145/3371119
-    pub_doi: 10.1145/3371119
+  - pub_title: Model-Based Testing of Networked Applications
+    pub_url: https://doi.org/10.1145/3460319.3464798
+    pub_doi: 10.1145/3460319.3464798
+  - pub_title: Verifying an HTTP Key-Value Server with Interaction Trees and VST
+    pub_url: https://drops.dagstuhl.de/opus/volltexte/2021/13927
+    pub_doi: 10.4230/LIPIcs.ITP.2021.32
