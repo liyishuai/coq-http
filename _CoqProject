@@ -19,9 +19,9 @@ theories/Tester.v
 theories/Execute.v
 app/Form.v
 app/AppMessage.v
-app/Semantics.v
-app/Tcp.v
-app/Observe.v
-app/Solver.v
-app/Tester.v
-app/Execute.v
+# app/Semantics.v
+# app/Tcp.v
+# app/Observe.v
+# app/Solver.v
+# app/Tester.v
+# app/Execute.v

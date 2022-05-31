@@ -14,9 +14,6 @@ Definition dparse {T} (pr : parser T) (s : string) : string + T :=
   | inr (t, _) => inr t
   end.
 
-Definition dpath' {T} (d : JDecode T) (s : string) (j : json) : string + T :=
-  decode__jpath (s -> this) j >>= d.
-
 Definition dpath {T} `{JDecode T} : string -> json -> string + T :=
   dpath' decode.
 
@@ -27,7 +24,7 @@ Definition decode__path : JDecode path :=
   fun j => dpath "path" j.
 
 Definition decode__oquery : JDecode (option query) :=
-  fun j => dpath "query" j.
+  dpath' decode__option "query".
 
 Definition decode__origin : JDecode request_target :=
   fun j => liftA2 RequestTarget__Origin (decode__path j) (decode__oquery j).
@@ -36,8 +33,8 @@ Instance JDecode__Scheme : JDecode http_scheme :=
   fun j => dpath "scheme" j >>= dparse parseScheme.
 
 Instance JDecode__Authority : JDecode authority :=
-  fun j => liftA2 Authority (dpath "userinfo" j) (dpath "host" j) <*>
-               (dpath "port" j).
+  fun j => liftA2 Authority (dpath' decode__option "userinfo" j) (dpath "host" j) <*>
+               (dpath' decode__option "port" j).
 
 Instance JDecode__URI : JDecode absolute_uri :=
   fun j => liftA2 URI (decode j) (dpath "authroity" j) <*>

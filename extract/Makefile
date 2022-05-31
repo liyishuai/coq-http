@@ -1,9 +1,9 @@
 COQMAKEFILE?=Makefile.coq
 
-BINS?=TestSwap.native TestHttp.native
+BINS?=TestHttp.native
 
 all: clean
-	$(MAKE) TestSwap.native
+#	$(MAKE) TestSwap.native
 	@rm -f *.ml*
 	$(MAKE) TestHttp.native
 

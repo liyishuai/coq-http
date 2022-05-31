@@ -73,7 +73,7 @@ Definition dualize {E R} `{Is__oE E} (e : netE R) : itree E R :=
              else throw $ "Expect target URI " ++ absolute_uri_to_string u0
                           ++ ", but observed " ++ absolute_uri_to_string u
            end
-         | inr r0, inr r => embed Unify__Response r0 r
+         | inr r0, inr r => trigger (Unify__Response r0 r)
          end
       else throw $ "Expect source " ++ to_string s0
                  ++ ", but observed " ++ to_string s
