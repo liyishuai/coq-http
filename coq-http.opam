@@ -19,11 +19,11 @@ run-test: [make "-j%{jobs}%" "test"]
 install: [make "install" "INSTALLDIR=%{bin}%"]
 depends: [
   "coq" { >= "8.13~" }
-  "ocamlbuild" { >= "0.14.0" }
+  "ocamlbuild" { >= "0.14.1" }
   "coq-itree-io" { >= "0.1.0" }
-  "coq-parsec" { >= "0.1.0" }
-  "coq-quickchick" 
-  "coq-json" 
+  "coq-parsec" { >= "0.1.1" }
+  "coq-quickchick" { >= "1.6.3" }
+  "coq-json" { >= "0.1.1" }
 ]
 
 tags: [
@@ -32,7 +32,7 @@ tags: [
   "keyword:co-induction"
   "keyword:extraction"
   "keyword:reactive systems"
-  "date:2021-01-14"
+  "date:2022-05-31"
   "logpath:HTTP"
 ]
 authors: [
