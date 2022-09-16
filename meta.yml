@@ -3,7 +3,7 @@ fullname: coq-http
 shortname: coq-http
 opam_name: coq-http
 organization: liyishuai
-circleci: true
+action: true
 synopsis: HTTP in Coq
 description: HTTP specification in Coq, testable and verifiable
 authors:
@@ -51,9 +51,14 @@ supported_coq_versions:
   text: 8.14 or later
   opam: '{ >= "8.14~" }'
 tested_coq_opam_versions:
-  - version: '8.14-ocaml-4.12-flambda'
-  - version: '8.15-ocaml-4.12-flambda'
-  - version: 'dev-ocaml-4.12-flambda'
+  - version: '8.14'
+  - version: '8.15'
+  - version: '8.16'
+  - version: 'dev'
+action_appendix: |2-
+            export: 'OPAMWITHTEST'
+          env:
+            OPAMWITHTEST: true
 publications:
   - pub_title: >-
       From C to Interaction Trees:

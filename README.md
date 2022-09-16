@@ -4,10 +4,10 @@ Follow the instructions on https://github.com/coq-community/templates to regener
 --->
 # coq-http
 
-[![CircleCI][circleci-shield]][circleci-link]
+[![Docker CI][docker-action-shield]][docker-action-link]
 
-[circleci-shield]: https://circleci.com/gh/liyishuai/coq-http.svg?style=svg
-[circleci-link]:   https://circleci.com/gh/liyishuai/coq-http
+[docker-action-shield]: https://github.com/liyishuai/coq-http/workflows/Docker%20CI/badge.svg?branch=master
+[docker-action-link]: https://github.com/liyishuai/coq-http/actions?query=workflow:"Docker%20CI"
 
 
 
