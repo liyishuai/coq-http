@@ -17,11 +17,11 @@ HTTP specification in Coq, testable and verifiable
 ## Meta
 
 - Author(s):
-  - Yishuai Li
-  - Li-yao Xia
-  - Yao Li
+  - Yishuai Li [<img src="https://zenodo.org/static/img/orcid.svg" height="14px" alt="ORCID logo" />](https://orcid.org/0000-0002-5728-5903)
+  - Li-yao Xia [<img src="https://zenodo.org/static/img/orcid.svg" height="14px" alt="ORCID logo" />](https://orcid.org/0000-0003-2673-4400)
+  - Yao Li [<img src="https://zenodo.org/static/img/orcid.svg" height="14px" alt="ORCID logo" />](https://orcid.org/0000-0001-8720-883X)
   - Azzam Althagafi
-  - Benjamin C. Pierce
+  - Benjamin C. Pierce [<img src="https://zenodo.org/static/img/orcid.svg" height="14px" alt="ORCID logo" />](https://orcid.org/0000-0001-7839-1636)
 - License: [Mozilla Public License 2.0](LICENSE)
 - Compatible Coq versions: 8.14 or later
 - Additional dependencies:
@@ -33,6 +33,7 @@ HTTP specification in Coq, testable and verifiable
   - [From C to Interaction Trees: Specifying, Verifying, and Testing a Networked Server](https://doi.org/10.1145/3293880.3294106) doi:[10.1145/3293880.3294106](https://doi.org/10.1145/3293880.3294106)
   - [Model-Based Testing of Networked Applications](https://doi.org/10.1145/3460319.3464798) doi:[10.1145/3460319.3464798](https://doi.org/10.1145/3460319.3464798)
   - [Verifying an HTTP Key-Value Server with Interaction Trees and VST](https://drops.dagstuhl.de/opus/volltexte/2021/13927) doi:[10.4230/LIPIcs.ITP.2021.32](https://doi.org/10.4230/LIPIcs.ITP.2021.32)
+  - [Testing by Dualization](https://repository.upenn.edu/edissertations/5376) doi:[10.48550/arXiv.2210.01047](https://doi.org/10.48550/arXiv.2210.01047)
 
 ## Building and installation instructions
 

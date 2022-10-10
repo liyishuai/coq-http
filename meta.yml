@@ -9,14 +9,18 @@ description: HTTP specification in Coq, testable and verifiable
 authors:
   - name: Yishuai Li
     email: yishuai@cis.upenn.edu
+    orcid: 0000-0002-5728-5903
   - name: Li-yao Xia
     email: xialiyao@cis.upenn.edu
+    orcid: 0000-0003-2673-4400
   - name: Yao Li
     email: liyao@cis.upenn.edu
+    orcid: 0000-0001-8720-883X
   - name: Azzam Althagafi
     email: aazzam@cis.upenn.edu
   - name: Benjamin C. Pierce
     email: bcpierce@cis.upenn.edu
+    orcid: 0000-0001-7839-1636
 license:
   - fullname: Mozilla Public License 2.0
     identifier: MPL-2.0
@@ -44,9 +48,8 @@ keywords:
   - name: co-induction
   - name: extraction
   - name: reactive systems
-date: 2022-05-31
 namespace: HTTP
-opam-file-maintainer: 'Yishuai Li <yishuai@cis.upenn.edu>'
+opam-file-maintainer: 'Yishuai Li <liyishuai.lys@alibaba-inc.com>'
 supported_coq_versions:
   text: 8.14 or later
   opam: '{ >= "8.14~" }'
@@ -71,3 +74,6 @@ publications:
   - pub_title: Verifying an HTTP Key-Value Server with Interaction Trees and VST
     pub_url: https://drops.dagstuhl.de/opus/volltexte/2021/13927
     pub_doi: 10.4230/LIPIcs.ITP.2021.32
+  - pub_title: Testing by Dualization
+    pub_url: https://repository.upenn.edu/edissertations/5376
+    pub_doi: 10.48550/arXiv.2210.01047

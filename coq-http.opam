@@ -2,7 +2,7 @@
 # Follow the instructions on https://github.com/coq-community/templates to regenerate.
 
 opam-version: "2.0"
-maintainer: "Yishuai Li <yishuai@cis.upenn.edu>"
+maintainer: "Yishuai Li <liyishuai.lys@alibaba-inc.com>"
 version: "dev"
 
 homepage: "https://github.com/liyishuai/coq-http"
@@ -30,7 +30,6 @@ tags: [
   "keyword:co-induction"
   "keyword:extraction"
   "keyword:reactive systems"
-  "date:2022-05-31"
   "logpath:HTTP"
 ]
 authors: [
