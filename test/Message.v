@@ -87,16 +87,16 @@ Example xreq2' : jexp :=
 
 Compute xreq2'.
 
-From App Require Import
-     Encode.
-From JSON Require Import
-     Printer.
+(* From App Require Import *)
+(*      Encode. *)
+(* From JSON Require Import *)
+(*      Printer. *)
 
-Example jres1 : IR := encode response1.
+(* Example jres1 : IR := encode response1. *)
 (* Compute jres1. *)
 
-Example response2 : swap_response id :=
-  Response__ListOrders [(233, (12, 100, 34, 500));
-                     (996, (56, 400, 78, 20))].
+(* Example response2 : swap_response id := *)
+(*   Response__ListOrders [(233, (12, 100, 34, 500)); *)
+(*                      (996, (56, 400, 78, 20))]. *)
 
 (* Compute to_string (encode response2). *)
