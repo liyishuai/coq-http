@@ -33,7 +33,7 @@ HTTP specification in Coq, testable and verifiable
   - [From C to Interaction Trees: Specifying, Verifying, and Testing a Networked Server](https://doi.org/10.1145/3293880.3294106) doi:[10.1145/3293880.3294106](https://doi.org/10.1145/3293880.3294106)
   - [Model-Based Testing of Networked Applications](https://doi.org/10.1145/3460319.3464798) doi:[10.1145/3460319.3464798](https://doi.org/10.1145/3460319.3464798)
   - [Verifying an HTTP Key-Value Server with Interaction Trees and VST](https://drops.dagstuhl.de/opus/volltexte/2021/13927) doi:[10.4230/LIPIcs.ITP.2021.32](https://doi.org/10.4230/LIPIcs.ITP.2021.32)
-  - [Testing by Dualization](https://repository.upenn.edu/edissertations/5376) doi:[10.48550/arXiv.2210.01047](https://doi.org/10.48550/arXiv.2210.01047)
+  - [Testing by Dualization](https://repository.upenn.edu/handle/20.500.14332/32046) doi:[20.500.14332/32046](https://doi.org/20.500.14332/32046)
 
 ## Building and installation instructions
 
