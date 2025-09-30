@@ -45,7 +45,7 @@ Lemma filter_length {A} (f : A -> bool) (l : list A) :
   length (filter f l) <= length l.
 Proof.
   induction l; simpl; intuition.
-  destruct (f a); simpl; intuition.
+  destruct (f a); simpl; intuition; auto with *.
 Qed.
 
 Program Fixpoint nodup {A} `{Dec_Eq A}
